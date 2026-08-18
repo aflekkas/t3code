@@ -56,6 +56,7 @@ import {
   codexSnapshotFromUnknown,
   isPrimaryCodexLimit,
   sortWindows,
+  windowHasTraffic,
 } from "./accountLimitsNormalize.ts";
 import { readLatestCodexRateLimits } from "./accountLimitsTranscripts.ts";
 
@@ -203,7 +204,13 @@ export const make = Effect.gen(function* () {
         const instanceId = snapshot.instanceId ?? defaultInstanceIdForProvider(snapshot.provider);
         const key = slotKey(snapshot.provider, instanceId);
         if (!snapshots.has(key)) {
-          snapshots.set(key, { ...snapshot, instanceId });
+          // Pre-upgrade caches were written before untouched windows were
+          // filtered, so a bare 0%/no-reset row can come back from disk.
+          snapshots.set(key, {
+            ...snapshot,
+            instanceId,
+            windows: snapshot.windows.filter(windowHasTraffic),
+          });
           if (snapshot.instanceId === undefined) migratedSlots.add(key);
         }
       }
@@ -247,7 +254,12 @@ export const make = Effect.gen(function* () {
     snapshot: AccountLimitsSnapshot & { readonly instanceId: ProviderInstanceId },
   ) {
     const key = slotKey(snapshot.provider, snapshot.instanceId);
-    snapshots.set(key, snapshot);
+    // Windows reach this map from more places than the provider parsers:
+    // the streamed Claude patch assembles its own array, and a patch can
+    // carry a window the account has never metered. Enforcing the filter at
+    // the single write path keeps the no-untouched-windows invariant true
+    // for every caller, present and future.
+    snapshots.set(key, { ...snapshot, windows: snapshot.windows.filter(windowHasTraffic) });
     // Live data on a slot settles what that slot is; live data on any OTHER
     // instance of the provider evicts a still-unconfirmed migrated row (see
     // `migratedSlots`).

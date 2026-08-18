@@ -123,11 +123,13 @@ function claudeWindowFromEntry(meta: ClaudeWindowMeta, entry: unknown): AccountL
 /**
  * A window the provider has never metered says nothing: untouched windows
  * report 0% used with no reset clock (the reset only exists once there is
- * traffic). Dropping them here - the one place windows are assembled -
- * keeps every client rendering the array as-is while sparing all of them a
- * row like a bare provider-side slug at a permanent 0%. A window appears
- * the moment it first carries usage, which is also when its reset clock
- * starts meaning something.
+ * traffic). Both provider parsers drop them, and AccountLimitsService
+ * re-applies the filter where windows are assembled outside these parsers
+ * (the streamed single-window patch, pre-upgrade cache rows loaded from
+ * disk) - so every client renders the array as-is without a row like a
+ * bare provider-side slug at a permanent 0%. A window appears the moment
+ * it first carries usage, which is also when its reset clock starts
+ * meaning something.
  */
 export function windowHasTraffic(window: AccountLimitsWindow): boolean {
   return window.usedPercent > 0 || window.resetsAt !== null;

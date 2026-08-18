@@ -464,6 +464,90 @@ it("an unconfirmed migrated row keeps its v1 shape across restarts - the ghost e
     }
   }).pipe(Effect.provide(NodeServices.layer), Effect.runPromise));
 
+it("drops untouched windows at every entry - the persisted cache and the streamed patch", () =>
+  Effect.gen(function* () {
+    const baseDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-limits-untouched-"));
+    NodeFS.mkdirSync(NodePath.join(baseDir, "userdata"), { recursive: true });
+    const cachePath = NodePath.join(baseDir, "userdata", "account-limits.json");
+    // A pre-upgrade cache row carrying a bare 0%/no-reset window next to a
+    // metered one - written before untouched windows were filtered.
+    NodeFS.writeFileSync(
+      cachePath,
+      // @effect-diagnostics-next-line preferSchemaOverJson:off - fabricates the raw cache file.
+      JSON.stringify([
+        {
+          provider: "claude",
+          plan: "max",
+          windows: [
+            {
+              id: "five_hour",
+              label: "5h",
+              usedPercent: 12,
+              resetsAt: "2026-08-08T23:00:00.000Z",
+              windowMinutes: 300,
+            },
+            {
+              id: "seven_day",
+              label: "Week",
+              usedPercent: 0,
+              resetsAt: null,
+              windowMinutes: 10080,
+            },
+          ],
+          asOf: "2026-08-01T00:00:00.000Z",
+          source: "live",
+        },
+      ]),
+    );
+    const roster = {
+      providerInstances: {
+        [asInstanceId("claudeAgent")]: { driver: asDriver("claudeAgent") },
+        // A codex home that cannot exist, or the transcript seed reads this
+        // machine's real ~/.codex/sessions mid-test (see instanceRoster).
+        [asInstanceId("codex")]: {
+          driver: asDriver("codex"),
+          config: { homePath: "/nonexistent/t3-test-codex-untouched" },
+        },
+      },
+    };
+    try {
+      const summary = yield* Effect.gen(function* () {
+        const service = yield* AccountLimitsServiceModule.AccountLimitsService;
+        // The loaded row must come back without its untouched window.
+        const loaded = yield* service.readSummary();
+        expect(
+          loaded.snapshots.map((row) => [
+            row.provider,
+            row.instanceId,
+            row.windows.map((w) => w.id),
+          ]),
+        ).toEqual([["claude", "claudeAgent", ["five_hour"]]]);
+        // A streamed patch naming a window with no traffic must not add it:
+        // no utilization and no reset clock is the untouched shape.
+        yield* service.ingest({
+          provider: asDriver("claudeAgent"),
+          payload: {
+            type: "rate_limit_event",
+            rate_limit_info: { status: "allowed", rateLimitType: "seven_day" },
+          },
+          createdAt: "2026-08-15T10:00:00.000Z",
+          providerInstanceId: asInstanceId("claudeAgent"),
+        });
+        return yield* service.readSummary();
+      }).pipe(Effect.provide(makeLayerAt(baseDir, roster)));
+      expect(summary.snapshots.map((row) => row.windows.map((w) => w.id))).toEqual([["five_hour"]]);
+      // The patch persisted the row back - the untouched window must not
+      // have ridden along to disk.
+      // @effect-diagnostics-next-line preferSchemaOverJson:off - reads the raw cache file back.
+      const persisted = JSON.parse(NodeFS.readFileSync(cachePath, "utf8")) as {
+        windows: { id: string }[];
+      }[];
+      expect(persisted.map((row) => row.windows.map((w) => w.id))).toEqual([["five_hour"]]);
+    } finally {
+      NodeFS.rmSync(baseDir, { recursive: true, force: true });
+    }
+  }).pipe(Effect.provide(NodeServices.layer), Effect.runPromise));
+
 it("evicts a row whose instance now runs a different driver", () =>
   Effect.gen(function* () {
     const baseDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-limits-flip-"));
