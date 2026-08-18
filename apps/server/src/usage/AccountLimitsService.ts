@@ -171,6 +171,7 @@ export const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   const config = yield* ServerConfig;
   const settingsService = yield* ServerSettings.ServerSettingsService;
+  const hostEnvironment = yield* HostProcessEnvironment;
 
   const snapshots = new Map<string, AccountLimitsSnapshot>();
   /**
@@ -182,7 +183,6 @@ export const make = Effect.gen(function* () {
    * migrated row may belong to somebody else, so it is evicted rather than
    * shown as a ghost account forever.
    */
-  const hostEnvironment = yield* HostProcessEnvironment;
   const migratedSlots = new Set<string>();
   const cachePath = path.join(config.stateDir, "account-limits.json");
   let lastCodexSeedAttemptAtMs = 0;
@@ -282,7 +282,9 @@ export const make = Effect.gen(function* () {
     if (full !== null) {
       // Rate limits do not apply to this account (API key / Bedrock / Vertex):
       // nothing to show, and nothing worth clearing a previous snapshot over.
-      if (full.windows.length === 0) return;
+      // An APPLICABLE snapshot stores even with zero windows - all meters
+      // untouched means the previous readings are gone, not still current.
+      if (!full.rateLimitsApply) return;
       yield* store({
         provider: "claude",
         instanceId,
@@ -297,6 +299,10 @@ export const make = Effect.gen(function* () {
     // last full snapshot from the same instance established.
     const window = claudeWindowFromRateLimitEvent(payload);
     if (window === null) return;
+    // An untouched streamed window (no utilization, no reset clock) carries
+    // no reading - replacing the metered window it names would delete real
+    // data, so it must leave the previous set alone entirely.
+    if (!windowHasTraffic(window)) return;
     const windows = sortWindows([
       ...(previous?.windows ?? []).filter((existing) => existing.id !== window.id),
       window,

@@ -138,6 +138,14 @@ export function windowHasTraffic(window: AccountLimitsWindow): boolean {
 export interface ClaudeUsageSnapshot {
   readonly plan: string | null;
   readonly windows: AccountLimitsWindow[];
+  /**
+   * False when the account has no rate limits at all (API key / Bedrock /
+   * Vertex). An APPLICABLE snapshot can also come back with zero windows -
+   * every window untouched, e.g. right after a reset - and the two must not
+   * conflate: not-applicable keeps whatever was known, applicable-but-empty
+   * means the meters really are clear now.
+   */
+  readonly rateLimitsApply: boolean;
 }
 
 /**
@@ -148,7 +156,8 @@ export interface ClaudeUsageSnapshot {
 export function claudeUsageSnapshotFromUnknown(value: unknown): ClaudeUsageSnapshot | null {
   if (!isRecord(value)) return null;
   const rateLimits = value.rate_limits;
-  if (rateLimits === null) return { plan: readString(value.subscription_type), windows: [] };
+  if (rateLimits === null)
+    return { plan: readString(value.subscription_type), windows: [], rateLimitsApply: false };
   if (!isRecord(rateLimits)) return null;
 
   const windows = new Map<string, AccountLimitsWindow>();
@@ -173,6 +182,7 @@ export function claudeUsageSnapshotFromUnknown(value: unknown): ClaudeUsageSnaps
   return {
     plan: readString(value.subscription_type),
     windows: sortWindows([...windows.values()].filter(windowHasTraffic)),
+    rateLimitsApply: true,
   };
 }
 

@@ -314,7 +314,7 @@ it.layer(NodeServices.layer)("account limits service", (it) => {
 // Plain `it`: the seed consults the real clock for its retry floor and
 // transcript-recency window, which the suite's virtual test clock (epoch
 // 0) would defeat.
-it("transcript seeding attributes a sole-owner dir and skips shared or disabled dirs", () =>
+it.live("transcript seeding attributes a sole-owner dir and skips shared or disabled dirs", () =>
   Effect.gen(function* () {
     const soleDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-seed-sole-"));
     const sharedDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-seed-shared-"));
@@ -378,93 +378,97 @@ it("transcript seeding attributes a sole-owner dir and skips shared or disabled 
         NodeFS.rmSync(dir, { recursive: true, force: true });
       }
     }
-  }).pipe(Effect.provide(NodeServices.layer), Effect.runPromise));
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
 
-it("an unconfirmed migrated row keeps its v1 shape across restarts - the ghost eviction survives", () =>
-  Effect.gen(function* () {
-    const baseDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-limits-restart-"));
-    NodeFS.mkdirSync(NodePath.join(baseDir, "userdata"), { recursive: true });
-    const cachePath = NodePath.join(baseDir, "userdata", "account-limits.json");
-    // A v1 cache: one claude row, no instanceId.
-    NodeFS.writeFileSync(
-      cachePath,
-      // @effect-diagnostics-next-line preferSchemaOverJson:off - fabricates the raw cache file.
-      JSON.stringify([
-        {
-          provider: "claude",
-          plan: "max",
-          windows: [
-            {
-              id: "five_hour",
-              label: "5h",
-              usedPercent: 12,
-              resetsAt: "2026-08-08T23:00:00.000Z",
-              windowMinutes: 300,
-            },
-          ],
-          asOf: "2026-08-01T00:00:00.000Z",
-          source: "live",
+it.live(
+  "an unconfirmed migrated row keeps its v1 shape across restarts - the ghost eviction survives",
+  () =>
+    Effect.gen(function* () {
+      const baseDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-limits-restart-"));
+      NodeFS.mkdirSync(NodePath.join(baseDir, "userdata"), { recursive: true });
+      const cachePath = NodePath.join(baseDir, "userdata", "account-limits.json");
+      // A v1 cache: one claude row, no instanceId.
+      NodeFS.writeFileSync(
+        cachePath,
+        // @effect-diagnostics-next-line preferSchemaOverJson:off - fabricates the raw cache file.
+        JSON.stringify([
+          {
+            provider: "claude",
+            plan: "max",
+            windows: [
+              {
+                id: "five_hour",
+                label: "5h",
+                usedPercent: 12,
+                resetsAt: "2026-08-08T23:00:00.000Z",
+                windowMinutes: 300,
+              },
+            ],
+            asOf: "2026-08-01T00:00:00.000Z",
+            source: "live",
+          },
+        ]),
+      );
+      const roster = {
+        providerInstances: {
+          [asInstanceId("claudeAgent")]: { driver: asDriver("claudeAgent") },
+          [asInstanceId("claude_partner")]: { driver: asDriver("claudeAgent") },
+          [asInstanceId("codex")]: {
+            driver: asDriver("codex"),
+            config: { homePath: "/nonexistent/t3-test-codex-default" },
+          },
         },
-      ]),
-    );
-    const roster = {
-      providerInstances: {
-        [asInstanceId("claudeAgent")]: { driver: asDriver("claudeAgent") },
-        [asInstanceId("claude_partner")]: { driver: asDriver("claudeAgent") },
-        [asInstanceId("codex")]: {
-          driver: asDriver("codex"),
-          config: { homePath: "/nonexistent/t3-test-codex-default" },
-        },
-      },
-    };
-    try {
-      // First run: an UNRELATED codex ingest persists the cache. The migrated
-      // claude row must be written back in its v1 shape, still unconfirmed.
-      yield* Effect.gen(function* () {
-        const service = yield* AccountLimitsServiceModule.AccountLimitsService;
-        yield* service.readSummary();
-        yield* service.ingest({
-          provider: asDriver("codex"),
-          payload: codexPayload(41),
-          createdAt: "2026-08-15T09:00:00.000Z",
-          providerInstanceId: asInstanceId("codex"),
-        });
-      }).pipe(Effect.provide(makeLayerAt(baseDir, roster)));
-      // @effect-diagnostics-next-line preferSchemaOverJson:off - reads the raw cache file back.
-      const persisted = JSON.parse(NodeFS.readFileSync(cachePath, "utf8")) as {
-        provider: string;
-        instanceId?: string;
-      }[];
-      expect(
-        persisted.map((row) => [row.provider, "instanceId" in row ? row.instanceId : "(none)"]),
-      ).toEqual([
-        ["claude", "(none)"],
-        ["codex", "codex"],
-      ]);
-      // Second run - a restart. Live claude data on ANOTHER instance must
-      // still evict the migrated default row instead of leaving a ghost.
-      const summary = yield* Effect.gen(function* () {
-        const service = yield* AccountLimitsServiceModule.AccountLimitsService;
-        yield* service.ingest({
-          provider: asDriver("claudeAgent"),
-          payload: claudeUsagePayload(31, 9),
-          createdAt: "2026-08-15T10:00:00.000Z",
-          providerInstanceId: asInstanceId("claude_partner"),
-        });
-        return yield* service.readSummary();
-      }).pipe(Effect.provide(makeLayerAt(baseDir, roster)));
-      expect(summary.snapshots.map((snapshot) => [snapshot.provider, snapshot.instanceId])).toEqual(
-        [
+      };
+      try {
+        // First run: an UNRELATED codex ingest persists the cache. The migrated
+        // claude row must be written back in its v1 shape, still unconfirmed.
+        yield* Effect.gen(function* () {
+          const service = yield* AccountLimitsServiceModule.AccountLimitsService;
+          yield* service.readSummary();
+          yield* service.ingest({
+            provider: asDriver("codex"),
+            payload: codexPayload(41),
+            createdAt: "2026-08-15T09:00:00.000Z",
+            providerInstanceId: asInstanceId("codex"),
+          });
+        }).pipe(Effect.provide(makeLayerAt(baseDir, roster)));
+        // @effect-diagnostics-next-line preferSchemaOverJson:off - reads the raw cache file back.
+        const persisted = JSON.parse(NodeFS.readFileSync(cachePath, "utf8")) as {
+          provider: string;
+          instanceId?: string;
+        }[];
+        expect(
+          persisted.map((row) => [row.provider, "instanceId" in row ? row.instanceId : "(none)"]),
+        ).toEqual([
+          ["claude", "(none)"],
+          ["codex", "codex"],
+        ]);
+        // Second run - a restart. Live claude data on ANOTHER instance must
+        // still evict the migrated default row instead of leaving a ghost.
+        const summary = yield* Effect.gen(function* () {
+          const service = yield* AccountLimitsServiceModule.AccountLimitsService;
+          yield* service.ingest({
+            provider: asDriver("claudeAgent"),
+            payload: claudeUsagePayload(31, 9),
+            createdAt: "2026-08-15T10:00:00.000Z",
+            providerInstanceId: asInstanceId("claude_partner"),
+          });
+          return yield* service.readSummary();
+        }).pipe(Effect.provide(makeLayerAt(baseDir, roster)));
+        expect(
+          summary.snapshots.map((snapshot) => [snapshot.provider, snapshot.instanceId]),
+        ).toEqual([
           ["claude", "claude_partner"],
           ["codex", "codex"],
-        ],
-      );
-    } finally {
-      NodeFS.rmSync(baseDir, { recursive: true, force: true });
-    }
-  }).pipe(Effect.provide(NodeServices.layer), Effect.runPromise));
+        ]);
+      } finally {
+        NodeFS.rmSync(baseDir, { recursive: true, force: true });
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
+);
 
-it("drops untouched windows at every entry - the persisted cache and the streamed patch", () =>
+it.live("drops untouched windows at every entry - the persisted cache and the streamed patch", () =>
   Effect.gen(function* () {
     const baseDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-limits-untouched-"));
     NodeFS.mkdirSync(NodePath.join(baseDir, "userdata"), { recursive: true });
@@ -533,22 +537,57 @@ it("drops untouched windows at every entry - the persisted cache and the streame
           createdAt: "2026-08-15T10:00:00.000Z",
           providerInstanceId: asInstanceId("claudeAgent"),
         });
+        // An untouched event naming the METERED window must not delete it -
+        // the patch is dropped entirely, not filtered after the merge.
+        yield* service.ingest({
+          provider: asDriver("claudeAgent"),
+          payload: {
+            type: "rate_limit_event",
+            rate_limit_info: { status: "allowed", rateLimitType: "five_hour" },
+          },
+          createdAt: "2026-08-15T10:00:01.000Z",
+          providerInstanceId: asInstanceId("claudeAgent"),
+        });
+        // Not-applicable (API key / Bedrock / Vertex) keeps what was known.
+        yield* service.ingest({
+          provider: asDriver("claudeAgent"),
+          payload: { rate_limits: null },
+          createdAt: "2026-08-15T10:00:02.000Z",
+          providerInstanceId: asInstanceId("claudeAgent"),
+        });
+        const kept = yield* service.readSummary();
+        expect(kept.snapshots.map((row) => row.windows.map((w) => [w.id, w.usedPercent]))).toEqual([
+          [["five_hour", 12]],
+        ]);
+        // An APPLICABLE snapshot whose windows are all untouched clears the
+        // row - the meters really are empty now, not still at their old
+        // readings.
+        yield* service.ingest({
+          provider: asDriver("claudeAgent"),
+          payload: {
+            subscription_type: "max",
+            rate_limits: { five_hour: { utilization: 0 }, seven_day: { utilization: 0 } },
+          },
+          createdAt: "2026-08-15T10:00:03.000Z",
+          providerInstanceId: asInstanceId("claudeAgent"),
+        });
         return yield* service.readSummary();
       }).pipe(Effect.provide(makeLayerAt(baseDir, roster)));
-      expect(summary.snapshots.map((row) => row.windows.map((w) => w.id))).toEqual([["five_hour"]]);
-      // The patch persisted the row back - the untouched window must not
-      // have ridden along to disk.
+      expect(summary.snapshots.map((row) => row.windows.map((w) => w.id))).toEqual([[]]);
+      // The cleared row persisted back without windows - and the untouched
+      // cache window never rode along to disk at any point.
       // @effect-diagnostics-next-line preferSchemaOverJson:off - reads the raw cache file back.
       const persisted = JSON.parse(NodeFS.readFileSync(cachePath, "utf8")) as {
         windows: { id: string }[];
       }[];
-      expect(persisted.map((row) => row.windows.map((w) => w.id))).toEqual([["five_hour"]]);
+      expect(persisted.map((row) => row.windows.map((w) => w.id))).toEqual([[]]);
     } finally {
       NodeFS.rmSync(baseDir, { recursive: true, force: true });
     }
-  }).pipe(Effect.provide(NodeServices.layer), Effect.runPromise));
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
 
-it("evicts a row whose instance now runs a different driver", () =>
+it.live("evicts a row whose instance now runs a different driver", () =>
   Effect.gen(function* () {
     const baseDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-limits-flip-"));
     NodeFS.mkdirSync(NodePath.join(baseDir, "userdata"), { recursive: true });
@@ -599,9 +638,10 @@ it("evicts a row whose instance now runs a different driver", () =>
     } finally {
       NodeFS.rmSync(baseDir, { recursive: true, force: true });
     }
-  }).pipe(Effect.provide(NodeServices.layer), Effect.runPromise));
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
 
-it("seeds a codex instance homed by its environment's CODEX_HOME", () =>
+it.live("seeds a codex instance homed by its environment's CODEX_HOME", () =>
   Effect.gen(function* () {
     // No homePath configured: the spawned CLI would resolve CODEX_HOME from
     // its child env, so the seed must read the same place.
@@ -645,9 +685,10 @@ it("seeds a codex instance homed by its environment's CODEX_HOME", () =>
     } finally {
       NodeFS.rmSync(envHome, { recursive: true, force: true });
     }
-  }).pipe(Effect.provide(NodeServices.layer), Effect.runPromise));
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
 
-it("a shadow-overlay instance seeds from its layout, not its CODEX_HOME env", () =>
+it.live("a shadow-overlay instance seeds from its layout, not its CODEX_HOME env", () =>
   Effect.gen(function* () {
     const line = (percent: number) =>
       `${JSON.stringify({
@@ -701,7 +742,8 @@ it("a shadow-overlay instance seeds from its layout, not its CODEX_HOME env", ()
       NodeFS.rmSync(plainEnvHome, { recursive: true, force: true });
       NodeFS.rmSync(shadowEnvHome, { recursive: true, force: true });
     }
-  }).pipe(Effect.provide(NodeServices.layer), Effect.runPromise));
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
 
 describe("planCodexTranscriptSeeds", () => {
   const target = (
