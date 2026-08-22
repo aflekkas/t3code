@@ -234,6 +234,12 @@ function claudeWindowFromLimitEntry(entry: unknown): AccountLimitsWindow | null 
  * Parses the streamed `rate_limit_event` SDK message into the one window it
  * names. Returns null for shapes that are not that message, and for windows
  * we hide.
+ *
+ * Units differ from the usage response: `rate_limit_info.utilization` mirrors
+ * the `anthropic-ratelimit-unified-*-utilization` response headers, which are
+ * a 0-1 fraction (`0.11` while the usage endpoint reports `12.0` for the same
+ * window at the same moment), so it is scaled here. Passing it through would
+ * show the binding window - the only one this message names - at 1/100th.
  */
 export function claudeWindowFromRateLimitEvent(value: unknown): AccountLimitsWindow | null {
   if (!isRecord(value)) return null;
@@ -248,7 +254,7 @@ export function claudeWindowFromRateLimitEvent(value: unknown): AccountLimitsWin
   return {
     id: meta.id,
     label: meta.label,
-    usedPercent: utilization === null ? 0 : clampPercent(utilization),
+    usedPercent: utilization === null ? 0 : clampPercent(utilization * 100),
     resetsAt: resetsAt === null ? null : isoFromUnixSeconds(resetsAt),
     windowMinutes: meta.minutes,
   };

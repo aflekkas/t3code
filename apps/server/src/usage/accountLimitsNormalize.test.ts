@@ -98,13 +98,15 @@ describe("claudeUsageSnapshotFromUnknown", () => {
 });
 
 describe("claudeWindowFromRateLimitEvent", () => {
-  it("maps the binding window with a unix-seconds reset", () => {
+  it("maps the binding window with a unix-seconds reset, scaling the 0-1 utilization", () => {
+    // The streamed field carries the response header's fraction, not the
+    // usage endpoint's percent: 0.875 here is the 87.5 the endpoint reports.
     const window = claudeWindowFromRateLimitEvent({
       type: "rate_limit_event",
       rate_limit_info: {
         status: "allowed_warning",
         rateLimitType: "five_hour",
-        utilization: 87.5,
+        utilization: 0.875,
         resetsAt: 1_786_600_800,
       },
     });
@@ -120,7 +122,7 @@ describe("claudeWindowFromRateLimitEvent", () => {
   it("drops hidden window types", () => {
     expect(
       claudeWindowFromRateLimitEvent({
-        rate_limit_info: { rateLimitType: "seven_day_opus", utilization: 90 },
+        rate_limit_info: { rateLimitType: "seven_day_opus", utilization: 0.9 },
       }),
     ).toBeNull();
   });

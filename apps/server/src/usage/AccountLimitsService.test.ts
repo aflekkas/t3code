@@ -38,7 +38,7 @@ const claudeUsagePayload = (fiveHour: number, weekly: number) => ({
   },
 });
 
-/** The streamed single-window Claude event. */
+/** The streamed single-window Claude event. `utilization` is a 0-1 fraction. */
 const claudeWindowPayload = (utilization: number) => ({
   type: "rate_limit_event",
   rate_limit_info: {
@@ -167,7 +167,7 @@ it.layer(NodeServices.layer)("account limits service", (it) => {
       });
       yield* service.ingest({
         provider: "claudeAgent",
-        payload: claudeWindowPayload(87.5),
+        payload: claudeWindowPayload(0.875),
         createdAt: "2026-08-15T12:00:01.000Z",
         providerInstanceId: asInstanceId("claude_partner"),
       });
