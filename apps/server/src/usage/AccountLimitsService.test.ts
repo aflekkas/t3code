@@ -6,6 +6,8 @@ import * as NodePath from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import { ProviderDriverKind, ProviderInstanceId, type ServerSettings } from "@t3tools/contracts";
+import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -186,7 +188,7 @@ it.layer(NodeServices.layer)("account limits service", (it) => {
     }).pipe(Effect.provide(makeLayer())),
   );
 
-  it.effect("v1 cache rows load under the default instance until live data settles them", () =>
+  it.effect("v1 cache rows load under the default instance until a write settles them", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -379,6 +381,102 @@ it.live("transcript seeding attributes a sole-owner dir and skips shared or disa
       }
     }
   }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+it.live(
+  "a transcript seed settles a migrated row like a live event - evicted by another instance, re-seeded by its own",
+  () =>
+    Effect.gen(function* () {
+      const workDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-seed-work-"));
+      const defaultDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-seed-default-"));
+      const baseDirs = [
+        NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-limits-seed-a-")),
+        NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-limits-seed-b-")),
+      ];
+      // Transcript lines must sit inside the seed's recency window, and the
+      // default instance's line must be newer than the v1 row it replaces.
+      const nowMs = yield* Clock.currentTimeMillis;
+      const isoAt = (offsetMs: number) => DateTime.formatIso(DateTime.makeUnsafe(nowMs - offsetMs));
+      const transcriptLine = (offsetMs: number, usedPercent: number) =>
+        JSON.stringify({
+          timestamp: isoAt(offsetMs),
+          payload: { rate_limits: codexPayload(usedPercent) },
+        });
+      NodeFS.mkdirSync(NodePath.join(workDir, "sessions"), { recursive: true });
+      NodeFS.writeFileSync(
+        NodePath.join(workDir, "sessions", "rollout-1.jsonl"),
+        `${transcriptLine(2 * 60 * 60 * 1000, 58)}\n`,
+      );
+      NodeFS.mkdirSync(NodePath.join(defaultDir, "sessions"), { recursive: true });
+      NodeFS.writeFileSync(
+        NodePath.join(defaultDir, "sessions", "rollout-1.jsonl"),
+        `${transcriptLine(60 * 60 * 1000, 23)}\n`,
+      );
+      // A v1 cache: one codex row, no instanceId - "whichever account wrote
+      // last", which may have been the work account as easily as the default.
+      const writeV1Cache = (baseDir: string) => {
+        NodeFS.mkdirSync(NodePath.join(baseDir, "userdata"), { recursive: true });
+        NodeFS.writeFileSync(
+          NodePath.join(baseDir, "userdata", "account-limits.json"),
+          JSON.stringify([
+            {
+              provider: "codex",
+              plan: "pro",
+              windows: [
+                {
+                  id: "weekly",
+                  label: "Weekly",
+                  usedPercent: 12,
+                  resetsAt: "2026-08-08T23:00:00.000Z",
+                  windowMinutes: 10080,
+                },
+              ],
+              asOf: isoAt(3 * 60 * 60 * 1000),
+              source: "live",
+            },
+          ]),
+        );
+      };
+      const roster = (defaultHome: string) => ({
+        providerInstances: {
+          [asInstanceId("codex")]: { driver: asDriver("codex"), config: { homePath: defaultHome } },
+          [asInstanceId("codex_work")]: {
+            driver: asDriver("codex"),
+            config: { homePath: workDir },
+          },
+        },
+      });
+      const readRows = (baseDir: string, defaultHome: string) =>
+        Effect.gen(function* () {
+          const service = yield* AccountLimitsServiceModule.AccountLimitsService;
+          const summary = yield* service.readSummary();
+          return summary.snapshots.map((snapshot) => [
+            snapshot.instanceId,
+            snapshot.source,
+            snapshot.windows[0]?.usedPercent,
+          ]);
+        }).pipe(Effect.provide(makeLayerAt(baseDir, roster(defaultHome))));
+      try {
+        // Only the work instance has transcripts: its seed is proof of a
+        // distinct account, so the unconfirmed migrated row goes the way it
+        // would under a live work event - evicted, not kept as a ghost.
+        writeV1Cache(baseDirs[0]!);
+        expect(yield* readRows(baseDirs[0]!, "/nonexistent/t3-test-codex-default")).toEqual([
+          ["codex_work", "transcript", 58],
+        ]);
+        // The default instance has transcripts of its own: the same pass
+        // seeds it back with real data, whichever order the seeds land in.
+        writeV1Cache(baseDirs[1]!);
+        expect(yield* readRows(baseDirs[1]!, defaultDir)).toEqual([
+          ["codex", "transcript", 23],
+          ["codex_work", "transcript", 58],
+        ]);
+      } finally {
+        for (const dir of [workDir, defaultDir, ...baseDirs]) {
+          NodeFS.rmSync(dir, { recursive: true, force: true });
+        }
+      }
+    }).pipe(Effect.provide(NodeServices.layer)),
 );
 
 it.live(

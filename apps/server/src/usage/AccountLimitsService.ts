@@ -177,11 +177,15 @@ export const make = Effect.gen(function* () {
   /**
    * Slot keys holding rows migrated from the v1 single-slot cache. A v1 row
    * was "whichever account wrote last", not "the default instance" - the
-   * default id is only the least-wrong home for it. The first live event
-   * proves the point either way: landing on the default slot confirms the
-   * row, landing on any other instance of the same provider proves the
-   * migrated row may belong to somebody else, so it is evicted rather than
-   * shown as a ghost account forever.
+   * default id is only the least-wrong home for it. The first write proves
+   * the point either way: landing on the default slot confirms the row,
+   * landing on any other instance of the same provider proves the migrated
+   * row may belong to somebody else, so it is evicted rather than shown as
+   * a ghost account forever. A transcript seed is a write like any other:
+   * a sole-owner sessions dir is the same evidence of a distinct account
+   * that a live event is, and the v1 row is no less ambiguous for having
+   * been contradicted from disk. A default instance with transcripts of its
+   * own re-seeds in the same pass, so nothing real is lost.
    */
   const migratedSlots = new Set<string>();
   const cachePath = path.join(config.stateDir, "account-limits.json");
@@ -260,9 +264,9 @@ export const make = Effect.gen(function* () {
     // the single write path keeps the no-untouched-windows invariant true
     // for every caller, present and future.
     snapshots.set(key, { ...snapshot, windows: snapshot.windows.filter(windowHasTraffic) });
-    // Live data on a slot settles what that slot is; live data on any OTHER
+    // A write to a slot settles what that slot is; a write to any OTHER
     // instance of the provider evicts a still-unconfirmed migrated row (see
-    // `migratedSlots`).
+    // `migratedSlots`). Live events and transcript seeds count alike.
     migratedSlots.delete(key);
     const defaultKey = slotKey(snapshot.provider, defaultInstanceIdForProvider(snapshot.provider));
     if (key !== defaultKey && migratedSlots.has(defaultKey)) {
