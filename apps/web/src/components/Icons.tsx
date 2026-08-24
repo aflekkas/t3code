@@ -214,6 +214,17 @@ export const GrokIcon: Icon = ({ className, ...props }) => (
   </svg>
 );
 
+export const ZCodeIcon: Icon = ({ className, ...props }) => (
+  <svg
+    {...props}
+    viewBox="0 0 24 24"
+    fill="none"
+    className={cn("fill-[#1A7AFF] dark:fill-[#6BA6FF]", className)}
+  >
+    <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v2A1.5 1.5 0 0 1 18.5 9H9.8l8.7 8.2A1.5 1.5 0 0 1 17.4 20h-13A1.5 1.5 0 0 1 4 18.5v-2A1.5 1.5 0 0 1 5.5 15h8.7L5.5 6.8A1.5 1.5 0 0 1 4 5.5Z" />
+  </svg>
+);
+
 export const TraeIcon: Icon = (props) => (
   <svg {...props} viewBox="0 0 24 24" fill="currentColor">
     {/* Back rectangle: left strip + bottom strip drawn separately — empty bottom-left corner is the gap between them */}

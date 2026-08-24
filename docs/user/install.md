@@ -61,8 +61,9 @@ to use, then authenticate it.
 | Cursor     | [Cursor CLI](https://cursor.com/cli)                  | `cursor-agent` | `agent login`         |
 | Grok Build | [Grok Build CLI](https://x.ai/cli)                    | `grok`         | `grok login`          |
 | OpenCode   | [OpenCode](https://opencode.ai)                       | `opencode`     | `opencode auth login` |
+| ZCode      | [ZCode](https://zcode.z.ai)                           | `zcode`        | `zcode login`         |
 
-Codex and Claude are on by default. Cursor, Grok Build, and OpenCode are off by default; turn
+Codex and Claude are on by default. Cursor, Grok Build, OpenCode, and ZCode are off by default; turn
 them on in **Settings** → the provider's card when you want to use them.
 
 Cursor is the one to watch: install Cursor CLI, which provides the `cursor-agent` binary that
@@ -86,6 +87,7 @@ authenticated shows its status in **Settings** and fails at session start with t
 to run.
 
 For multi-account setups, see [Codex](./providers-codex.md) and [Claude](./providers-claude.md).
+For ZCode coding-plan login and quota, see [ZCode](./providers-zcode.md).
 
 ## Next Steps
 
