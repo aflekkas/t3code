@@ -28,7 +28,7 @@ import {
   legacyInstanceIdFor,
   useAccountLimits,
 } from "../../state/accountLimits";
-import { PROVIDER_COLOR, PROVIDER_LABEL, PROVIDER_MARK, PROVIDER_ORDER } from "./usageProviders";
+import { PROVIDER_ORDER, PROVIDER_PRESENTATION } from "./usageProviders";
 
 /** Age past which a snapshot stops being "current" and earns a caption. */
 const STALE_AFTER_MS = 15 * 60_000;
@@ -135,10 +135,7 @@ function HoverWindowRow({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span
-        className="w-9 shrink-0 truncate whitespace-nowrap text-[10px] text-muted-foreground"
-        title={window.label}
-      >
+      <span className="w-9 shrink-0 truncate whitespace-nowrap text-[10px] text-muted-foreground">
         {window.label}
       </span>
       <LimitMeter window={window} color={color} />
@@ -171,14 +168,13 @@ export function AccountLimitsHoverCard() {
       {PROVIDER_ORDER.map((provider) => {
         const rows = byProvider.get(provider) ?? [];
         const only = rows.length === 1 ? rows[0] : undefined;
-        const Mark = PROVIDER_MARK[provider];
+        const presentation = PROVIDER_PRESENTATION[provider];
+        const Mark = presentation.mark;
         return (
           <div key={provider} className="flex flex-col gap-1">
             <div className="flex items-baseline gap-1.5">
               <Mark className="size-3 shrink-0 self-center" />
-              <span className="text-xs font-medium text-foreground">
-                {PROVIDER_LABEL[provider]}
-              </span>
+              <span className="text-xs font-medium text-foreground">{presentation.label}</span>
               <span className="ml-auto">
                 {only !== undefined ? <SnapshotAge snapshot={only.snapshot} nowMs={nowMs} /> : null}
               </span>
@@ -193,7 +189,7 @@ export function AccountLimitsHoverCard() {
                 <HoverWindowRow
                   key={window.id}
                   window={window}
-                  color={PROVIDER_COLOR[provider]}
+                  color={presentation.color}
                   nowMs={nowMs}
                 />
               ))
@@ -213,7 +209,7 @@ export function AccountLimitsHoverCard() {
                       <HoverWindowRow
                         key={window.id}
                         window={window}
-                        color={PROVIDER_COLOR[provider]}
+                        color={presentation.color}
                         nowMs={nowMs}
                       />
                     ))
@@ -244,10 +240,7 @@ function SectionWindowRow({
   const resetAt = formatResetAt(window.resetsAt, nowMs);
   return (
     <div className="flex items-center gap-3">
-      <span
-        className="w-10 shrink-0 truncate whitespace-nowrap text-xs text-muted-foreground"
-        title={window.label}
-      >
+      <span className="w-10 shrink-0 truncate whitespace-nowrap text-xs text-muted-foreground">
         {window.label}
       </span>
       <LimitMeter window={window} color={color} />
@@ -278,14 +271,13 @@ export function AccountLimitsSection() {
         {PROVIDER_ORDER.map((provider) => {
           const rows = byProvider.get(provider) ?? [];
           const only = rows.length === 1 ? rows[0] : undefined;
-          const Mark = PROVIDER_MARK[provider];
+          const presentation = PROVIDER_PRESENTATION[provider];
+          const Mark = presentation.mark;
           return (
             <div key={provider} className="flex flex-col gap-1.5">
               <div className="flex items-baseline gap-2">
                 <Mark className="size-3.5 shrink-0 self-center" />
-                <span className="text-sm font-medium text-foreground">
-                  {PROVIDER_LABEL[provider]}
-                </span>
+                <span className="text-sm font-medium text-foreground">{presentation.label}</span>
                 <span className="ml-auto">
                   {only !== undefined ? (
                     <SnapshotAge snapshot={only.snapshot} nowMs={nowMs} />
@@ -302,7 +294,7 @@ export function AccountLimitsSection() {
                   <SectionWindowRow
                     key={window.id}
                     window={window}
-                    color={PROVIDER_COLOR[provider]}
+                    color={presentation.color}
                     nowMs={nowMs}
                   />
                 ))
@@ -322,7 +314,7 @@ export function AccountLimitsSection() {
                         <SectionWindowRow
                           key={window.id}
                           window={window}
-                          color={PROVIDER_COLOR[provider]}
+                          color={presentation.color}
                           nowMs={nowMs}
                         />
                       ))
