@@ -5,6 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const testState = vi.hoisted(() => ({
   useUsage: vi.fn(),
+  refreshUsage: vi.fn(),
+  refreshLimits: vi.fn(),
+  callbacks: [] as Array<() => void>,
   metric: "cost" as "cost" | "tokens",
   breakdown: "time" as "model" | "time",
 }));
@@ -13,6 +16,10 @@ vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react")>();
   return {
     ...actual,
+    useCallback: vi.fn((callback: () => void) => {
+      testState.callbacks.push(callback);
+      return callback;
+    }),
     useState: vi.fn((initial: unknown) => [
       typeof initial === "function"
         ? {
@@ -37,6 +44,19 @@ vi.mock("react", async (importOriginal) => {
 });
 
 vi.mock("../../env", () => ({ isElectron: false }));
+vi.mock("../../state/accountLimits", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../state/accountLimits")>();
+  return {
+    ...actual,
+    useAccountLimits: () => ({
+      byProvider: new Map(),
+      reportingEnvironments: 0,
+      isPending: false,
+      isSettling: false,
+      refresh: testState.refreshLimits,
+    }),
+  };
+});
 vi.mock("../../state/usage", () => ({ useUsage: testState.useUsage }));
 vi.mock("../ui/button", () => ({ Button: "button" }));
 vi.mock("../ui/scroll-area", () => ({ ScrollArea: "div" }));
@@ -106,6 +126,9 @@ const modelTotals = Object.freeze([
 beforeEach(() => {
   testState.metric = "cost";
   testState.breakdown = "time";
+  testState.callbacks.length = 0;
+  testState.refreshUsage.mockClear();
+  testState.refreshLimits.mockClear();
   testState.useUsage.mockReturnValue({
     merged: {
       ...mergeUsage([], USAGE_CONTRACT_VERSION),
@@ -130,8 +153,17 @@ beforeEach(() => {
     environments: [],
     isPending: false,
     isPartial: false,
-    refresh: vi.fn(),
+    refresh: testState.refreshUsage,
   });
+});
+
+it("refreshes usage totals and account limits together", () => {
+  renderToStaticMarkup(<UsagePage />);
+
+  expect(testState.callbacks).toHaveLength(1);
+  testState.callbacks[0]?.();
+  expect(testState.refreshUsage).toHaveBeenCalledOnce();
+  expect(testState.refreshLimits).toHaveBeenCalledOnce();
 });
 
 describe("UsagePage hourly breakdown", () => {
