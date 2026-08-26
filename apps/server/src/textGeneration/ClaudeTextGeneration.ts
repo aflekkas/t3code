@@ -142,19 +142,20 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
       thinkingDescriptor?.type === "boolean" ? thinkingDescriptor.currentValue : undefined;
     const fastMode =
       fastModeDescriptor?.type === "boolean" ? fastModeDescriptor.currentValue : undefined;
+    // The prompt below carries repository content the user did not write - a
+    // staged diff, a PR template - so this run must not execute the hooks a
+    // repository can ship in its own settings.
     const settings = {
+      disableAllHooks: true,
       ...(typeof thinking === "boolean" ? { alwaysThinkingEnabled: thinking } : {}),
       ...(fastMode ? { fastMode: true } : {}),
       ...(ultracode ? { ultracode: true } : {}),
     };
-    const settingsJson =
-      Object.keys(settings).length > 0
-        ? yield* encodeJsonForOperation(
-            operation,
-            settings,
-            "Failed to encode Claude CLI settings.",
-          )
-        : undefined;
+    const settingsJson = yield* encodeJsonForOperation(
+      operation,
+      settings,
+      "Failed to encode Claude CLI settings.",
+    );
 
     const runClaudeCommand = Effect.fn("runClaudeJson.runClaudeCommand")(function* () {
       const spawnCommand = yield* resolveSpawnCommand(
@@ -168,8 +169,19 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
           "--model",
           resolveClaudeApiModelId(modelSelection),
           ...(cliEffort ? ["--effort", cliEffort] : []),
-          ...(settingsJson ? ["--settings", settingsJson] : []),
-          "--dangerously-skip-permissions",
+          "--settings",
+          settingsJson,
+          // Structured text generation only rewrites the prompt it is handed,
+          // so it runs with no tools, no repository settings, and no MCP
+          // servers. Commit and PR generation are reached from a button rather
+          // than a chat turn, so a tool call here would have no approval
+          // surface in front of it. The Codex path sandboxes the same prompts
+          // with `-s read-only`.
+          "--allowed-tools",
+          "",
+          "--setting-sources",
+          "",
+          "--strict-mcp-config",
         ],
         { env: claudeEnvironment },
       );
