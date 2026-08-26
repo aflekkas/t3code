@@ -65,12 +65,8 @@ const CODEX_SEED_MIN_INTERVAL_MS = 60_000;
 
 /** On-disk shape of the snapshot cache: the contract array, JSON-encoded. */
 const LimitsCacheFile = Schema.Array(AccountLimitsSnapshot);
-const decodeLimitsCache = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(LimitsCacheFile as unknown as Schema.Codec<typeof LimitsCacheFile.Type>),
-);
-const encodeLimitsCache = Schema.encodeEffect(
-  Schema.fromJsonString(LimitsCacheFile as unknown as Schema.Codec<typeof LimitsCacheFile.Type>),
-);
+const decodeLimitsCache = Schema.decodeUnknownEffect(Schema.fromJsonString(LimitsCacheFile));
+const encodeLimitsCache = Schema.encodeEffect(Schema.fromJsonString(LimitsCacheFile));
 const decodeCodexSettings = Schema.decodeUnknownEffect(CodexSettings);
 
 export interface AccountLimitsIngestInput {
@@ -378,7 +374,10 @@ export const make = Effect.gen(function* () {
     configMap: ProviderInstanceConfigMap | null,
   ) {
     if (configMap === null) return;
-    if (nowMs - lastCodexSeedAttemptAtMs < CODEX_SEED_MIN_INTERVAL_MS) return;
+    const elapsedMs = nowMs - lastCodexSeedAttemptAtMs;
+    // A backward host clock must not park transcript recovery until the old
+    // timestamp comes around again. One extra scan after an NTP step is safe.
+    if (elapsedMs >= 0 && elapsedMs < CODEX_SEED_MIN_INTERVAL_MS) return;
     lastCodexSeedAttemptAtMs = nowMs;
 
     const targets: CodexSeedTarget[] = [];

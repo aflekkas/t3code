@@ -82,11 +82,12 @@ async function readTailRateLimits(
     const length = stat.size - start;
     if (length <= 0) return null;
     const buffer = Buffer.alloc(length);
-    await handle.read(buffer, 0, length, start);
+    const { bytesRead } = await handle.read(buffer, 0, length, start);
+    if (bytesRead <= 0) return null;
 
     // The first line may be cut mid-record by the tail offset; JSON.parse
     // rejects it and the scan moves on.
-    const lines = buffer.toString("utf8").split("\n");
+    const lines = buffer.subarray(0, bytesRead).toString("utf8").split("\n");
     for (let index = lines.length - 1; index >= 0; index -= 1) {
       const line = lines[index];
       if (!line || !line.includes('"rate_limits"')) continue;

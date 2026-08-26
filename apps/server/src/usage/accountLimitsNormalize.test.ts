@@ -1,5 +1,4 @@
 import { describe, expect, it } from "@effect/vitest";
-import * as DateTime from "effect/DateTime";
 
 import {
   claudeUsageSnapshotFromUnknown,
@@ -32,11 +31,11 @@ describe("claudeUsageSnapshotFromUnknown", () => {
     expect(snapshot?.windows[2]).toMatchObject({ label: "Fable", usedPercent: 30 });
   });
 
-  it("reads the newer limits array, including a Fable-scoped weekly", () => {
+  it("prefers the newer limits array, including a Fable-scoped weekly", () => {
     const snapshot = claudeUsageSnapshotFromUnknown({
       subscription_type: "max",
       rate_limits: {
-        five_hour: null,
+        five_hour: { utilization: 88, resets_at: "2026-08-09T00:00:00.000Z" },
         limits: [
           { kind: "session", percent: 10, resets_at: "2026-08-08T23:00:00.000Z" },
           { kind: "weekly_all", percent: 20, resets_at: "2026-08-11T17:00:00.000Z" },
@@ -114,7 +113,7 @@ describe("claudeWindowFromRateLimitEvent", () => {
       id: "five_hour",
       label: "5h",
       usedPercent: 87.5,
-      resetsAt: DateTime.formatIso(DateTime.makeUnsafe(1_786_600_800_000)),
+      resetsAt: "2026-08-13T06:00:00.000Z",
       windowMinutes: 300,
     });
   });
@@ -146,7 +145,7 @@ describe("codexSnapshotFromUnknown", () => {
         id: "seven_day",
         label: "Week",
         usedPercent: 14,
-        resetsAt: DateTime.formatIso(DateTime.makeUnsafe(1_786_677_720_000)),
+        resetsAt: "2026-08-14T03:22:00.000Z",
         windowMinutes: 10080,
       },
     ]);

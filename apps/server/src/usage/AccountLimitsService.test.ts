@@ -12,6 +12,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as TestClock from "effect/testing/TestClock";
 
 import * as ServerConfig from "../config.ts";
 import * as ServerSettingsModule from "../serverSettings.ts";
@@ -310,6 +311,62 @@ it.layer(NodeServices.layer)("account limits service", (it) => {
         }),
       ),
     ),
+  );
+
+  it.effect("retries transcript seeding immediately after the wall clock moves backward", () =>
+    Effect.gen(function* () {
+      const codexHome = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-seed-clock-step-"));
+      const sessionsDir = NodePath.join(codexHome, "sessions");
+      NodeFS.mkdirSync(sessionsDir, { recursive: true });
+      try {
+        yield* Effect.gen(function* () {
+          const beforeStepMs = 1_800_000_000_000;
+          yield* TestClock.setTime(beforeStepMs);
+          const service = yield* AccountLimitsServiceModule.AccountLimitsService;
+
+          // The empty scan records the throttle floor.
+          expect((yield* service.readSummary()).snapshots).toEqual([]);
+
+          const afterStepMs = beforeStepMs - 1_000;
+          const transcriptPath = NodePath.join(sessionsDir, "rollout-1.jsonl");
+          NodeFS.writeFileSync(
+            transcriptPath,
+            // @effect-diagnostics-next-line preferSchemaOverJson:off - fabricates one raw transcript line.
+            `${JSON.stringify({
+              timestamp: DateTime.formatIso(DateTime.makeUnsafe(afterStepMs)),
+              payload: { rate_limits: codexPayload(64) },
+            })}\n`,
+          );
+          NodeFS.utimesSync(transcriptPath, afterStepMs / 1_000, afterStepMs / 1_000);
+          yield* TestClock.setTime(afterStepMs);
+
+          const summary = yield* service.readSummary();
+          expect(
+            summary.snapshots.map((snapshot) => [
+              snapshot.instanceId,
+              snapshot.windows[0]?.usedPercent,
+            ]),
+          ).toEqual([["codex_clock", 64]]);
+        }).pipe(
+          Effect.provide(
+            makeLayer({
+              providerInstances: {
+                [asInstanceId("codex")]: {
+                  driver: asDriver("codex"),
+                  config: { homePath: "/nonexistent/t3-test-codex-default" },
+                },
+                [asInstanceId("codex_clock")]: {
+                  driver: asDriver("codex"),
+                  config: { homePath: codexHome },
+                },
+              },
+            }),
+          ),
+        );
+      } finally {
+        NodeFS.rmSync(codexHome, { recursive: true, force: true });
+      }
+    }),
   );
 });
 

@@ -8,6 +8,7 @@ import type {
   Options as ClaudeQueryOptions,
   PermissionMode,
   PermissionResult,
+  SDKControlGetUsageResponse,
   SDKMessage,
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
@@ -37,7 +38,11 @@ import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderAdapterProcessError, ProviderAdapterValidationError } from "../Errors.ts";
 import type { ClaudeAdapterShape } from "../Services/ClaudeAdapter.ts";
-import { makeClaudeAdapter, type ClaudeAdapterLiveOptions } from "./ClaudeAdapter.ts";
+import {
+  makeClaudeAdapter,
+  readClaudeAccountUsage,
+  type ClaudeAdapterLiveOptions,
+} from "./ClaudeAdapter.ts";
 const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
 
 // Test-local service tag so the rest of the file can keep using `yield* ClaudeAdapter`.
@@ -273,6 +278,31 @@ const THREAD_ID = ThreadId.make("thread-claude-1");
 const RESUME_THREAD_ID = ThreadId.make("thread-claude-resume");
 
 describe("ClaudeAdapterLive", () => {
+  it.effect("abandons a hung account-usage request after three seconds", () =>
+    Effect.gen(function* () {
+      let resolveUsage: (response: SDKControlGetUsageResponse) => void = () => {};
+      const usageResponse = new Promise<SDKControlGetUsageResponse>((resolve) => {
+        resolveUsage = resolve;
+      });
+      let signalUsageRequested: () => void = () => {};
+      const usageRequested = new Promise<void>((resolve) => {
+        signalUsageRequested = resolve;
+      });
+
+      const usageFiber = yield* readClaudeAccountUsage({
+        usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: () => {
+          signalUsageRequested();
+          return usageResponse;
+        },
+      }).pipe(Effect.forkChild);
+      yield* Effect.promise(() => usageRequested);
+      yield* TestClock.adjust("3 seconds");
+
+      assert.equal(yield* Fiber.join(usageFiber), undefined);
+      resolveUsage({} as SDKControlGetUsageResponse);
+    }),
+  );
+
   it.effect("returns validation error for non-claude provider on startSession", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {

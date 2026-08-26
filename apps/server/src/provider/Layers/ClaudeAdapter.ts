@@ -273,6 +273,21 @@ interface ClaudeQueryRuntime extends AsyncIterable<SDKMessage> {
   readonly close: () => void;
 }
 
+/** Reads Claude's experimental account-usage snapshot without allowing a hung control call to leak a fiber. */
+export function readClaudeAccountUsage(
+  runtime: Pick<ClaudeQueryRuntime, "usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET">,
+) {
+  return Effect.promise(async () => {
+    try {
+      // Called through the query object so the SDK method keeps its receiver;
+      // an extracted reference loses `this` and throws.
+      return await runtime.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?.();
+    } catch {
+      return undefined;
+    }
+  }).pipe(Effect.timeoutOption("3 seconds"), Effect.map(Option.getOrUndefined));
+}
+
 export interface ClaudeAdapterLiveOptions {
   readonly instanceId?: ProviderInstanceId;
   readonly environment?: NodeJS.ProcessEnv;
@@ -3430,6 +3445,8 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
    * `account.rate-limits.updated`. The streamed `rate_limit_event` only ever
    * names the single window currently binding, and Claude limits never reach
    * disk, so this pull is the only source that shows every window at once.
+   * The throttle is shared by sessions owned by this adapter; concurrent
+   * initialization can race into one extra request, which is harmless.
    */
   const emitAccountUsageSnapshot = Effect.fn("emitAccountUsageSnapshot")(function* (
     context: ClaudeSessionContext,
@@ -3442,15 +3459,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     if (elapsed >= 0 && elapsed < ACCOUNT_USAGE_MIN_INTERVAL_MS) return;
     lastAccountUsageFetchAtMs = now;
 
-    const usage = yield* Effect.promise(async () => {
-      try {
-        // Called through the query object so the SDK method keeps its
-        // receiver; an extracted reference loses `this` and throws.
-        return await context.query.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?.();
-      } catch {
-        return undefined;
-      }
-    });
+    const usage = yield* readClaudeAccountUsage(context.query);
     if (!usage || usage.rate_limits === null || usage.rate_limits === undefined) return;
 
     const stamp = yield* makeEventStamp();
