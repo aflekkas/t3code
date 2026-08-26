@@ -1,4 +1,12 @@
-# Customize a project icon
+# Project settings
+
+## Choose the default model for new threads
+
+Open **Project settings** from the command palette, then use **New threads → Model** to choose the
+model and its reasoning options. Picking a saved favorite applies its saved reasoning effort to the
+project default too.
+
+## Customize a project icon
 
 T3 Code selects a project icon automatically. It checks `t3.json`, common favicon and app icon
 paths, and icon links in project HTML files.

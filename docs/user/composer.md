@@ -10,6 +10,15 @@ becomes available after every upload finishes. Failed uploads can be retried or 
 On web and desktop, HEIC and HEIF photos are automatically converted to JPEG when you drag them into
 the composer or paste them into a message.
 
+## Favorite model configurations
+
+The star beside a model saves the active model configuration, including reasoning effort and other
+model options. Selecting that favorite later restores the saved options along with the model. To
+replace a saved configuration, remove the favorite, choose the options you want, and add it again.
+
+Favorites created by an older version of T3 Code remain model-only and keep the current options when
+selected.
+
 ## Commands and skills
 
 Type `/` to open the command menu. Type `$` to find and add a skill. Skill rows show their source,

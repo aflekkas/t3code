@@ -72,6 +72,7 @@ import {
   resolveAppModelSelectionState,
   withoutPlanAgentSelection,
 } from "../../modelSelection";
+import { buildModelFavoriteOptions } from "../../modelFavorites";
 import {
   applyProviderInstanceSettings,
   deriveProviderInstanceEntries,
@@ -1882,6 +1883,9 @@ export function GeneralSettingsPanel() {
   );
   const textGenProvider: ProviderDriverKind =
     textGenInstanceEntry?.driverKind ?? DEFAULT_DRIVER_KIND;
+  const textGenFavoriteOptions = textGenInstanceEntry
+    ? buildModelFavoriteOptions(textGenerationModelSelection, textGenInstanceEntry.models)
+    : [];
   const textGenerationModelOptionsByInstance = getCustomModelOptionsByInstance(
     settings,
     serverProviders,
@@ -2420,14 +2424,19 @@ export function GeneralSettingsPanel() {
                 lockedProvider={null}
                 instanceEntries={textGenerationModelInstanceEntries}
                 modelOptionsByInstance={textGenerationModelOptionsByInstance}
+                selectionOptions={textGenFavoriteOptions}
                 triggerVariant="outline"
                 triggerClassName="min-w-0 max-w-none shrink-0 text-foreground/90 hover:text-foreground"
-                onInstanceModelChange={(instanceId, model) => {
+                onInstanceModelChange={(instanceId, model, savedOptions) => {
                   updateSettings({
                     textGenerationModelSelection: resolveAppModelSelectionState(
                       {
                         ...settings,
-                        textGenerationModelSelection: createModelSelection(instanceId, model),
+                        textGenerationModelSelection: createModelSelection(
+                          instanceId,
+                          model,
+                          savedOptions,
+                        ),
                       },
                       serverProviders,
                     ),

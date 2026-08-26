@@ -8,6 +8,7 @@ import {
   type ProjectScript,
   type ProjectId,
   type ProviderApprovalDecision,
+  type ProviderOptionSelection,
   type PreviewAnnotationPayload,
   ProviderInstanceId,
   type ServerProvider,
@@ -6511,7 +6512,11 @@ function ChatViewContent(props: ChatViewProps) {
   );
 
   const onProviderModelSelect = useCallback(
-    (instanceId: ProviderInstanceId, model: string) => {
+    (
+      instanceId: ProviderInstanceId,
+      model: string,
+      savedOptions?: ReadonlyArray<ProviderOptionSelection>,
+    ) => {
       if (!activeThread) return;
       // Look up the configured instance so model normalization and custom
       // model lookup stay scoped to that exact instance. Unknown instance ids
@@ -6549,10 +6554,7 @@ function ChatViewContent(props: ChatViewProps) {
         scheduleComposerFocus();
         return;
       }
-      const nextModelSelection: ModelSelection = {
-        instanceId,
-        model: resolvedModel,
-      };
+      const nextModelSelection = createModelSelection(instanceId, resolvedModel, savedOptions);
       const modelChangeBlockReason = getStartedThreadModelChangeBlockReason({
         providers: providerStatuses,
         hasStartedSession: activeThread.session !== null,
@@ -6572,6 +6574,7 @@ function ChatViewContent(props: ChatViewProps) {
       setComposerDraftModelSelection(
         scopeThreadRef(activeThread.environmentId, activeThread.id),
         nextModelSelection,
+        { replaceOptions: savedOptions !== undefined },
       );
       setStickyComposerModelSelection(nextModelSelection);
       scheduleComposerFocus();

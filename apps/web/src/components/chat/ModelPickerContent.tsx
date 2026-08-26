@@ -1,6 +1,7 @@
 import {
   type ProviderInstanceId,
   type ProviderDriverKind,
+  type ProviderOptionSelection,
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
 import { resolveSelectableModel } from "@t3tools/shared/model";
@@ -41,6 +42,11 @@ import {
   type ProviderInstanceEntry,
 } from "../../providerInstances";
 import { providerModelKey, sortProviderModelItems } from "../../modelOrdering";
+import {
+  findModelFavorite,
+  getModelFavoriteEffortLabel,
+  toggleModelFavorite,
+} from "../../modelFavorites";
 
 type ModelPickerItem = {
   slug: string;
@@ -88,10 +94,15 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
    * model set but are free to diverge via customModels).
    */
   modelOptionsByInstance: ReadonlyMap<ProviderInstanceId, ReadonlyArray<ModelEsque>>;
+  selectionOptions: ReadonlyArray<ProviderOptionSelection>;
   terminalOpen: boolean;
   onRequestClose?: () => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
-  onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
+  onInstanceModelChange: (
+    instanceId: ProviderInstanceId,
+    model: string,
+    savedOptions?: ReadonlyArray<ProviderOptionSelection>,
+  ) => void;
 }) {
   const {
     keybindings: providedKeybindings,
@@ -169,6 +180,16 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   const favoritesSet = useMemo(() => {
     return new Set(favorites.map((fav) => providerModelKey(fav.provider, fav.model)));
   }, [favorites]);
+  const favoriteByKey = useMemo(
+    () =>
+      new Map(
+        favorites.map((favorite) => [
+          providerModelKey(favorite.provider, favorite.model),
+          favorite,
+        ]),
+      ),
+    [favorites],
+  );
 
   /**
    * Lookup table keyed by `instanceId`. Used for display name + driver
@@ -434,24 +455,31 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       // normalization rules, so pass the driver kind here.
       const resolvedModel = resolveSelectableModel(entry.driverKind, modelSlug, options);
       if (resolvedModel) {
-        onInstanceModelChange(instanceId, resolvedModel);
+        const favorite = findModelFavorite(favorites, instanceId, modelSlug);
+        onInstanceModelChange(instanceId, resolvedModel, favorite?.options);
       }
     },
-    [entryByInstanceId, getModelDisabledReason, modelOptionsByInstance, onInstanceModelChange],
+    [
+      entryByInstanceId,
+      favorites,
+      getModelDisabledReason,
+      modelOptionsByInstance,
+      onInstanceModelChange,
+    ],
   );
 
   const toggleFavorite = useCallback(
     (instanceId: ProviderInstanceId, model: string) => {
-      const newFavorites = [...favorites];
-      const index = newFavorites.findIndex((f) => f.provider === instanceId && f.model === model);
-      if (index >= 0) {
-        newFavorites.splice(index, 1);
-      } else {
-        newFavorites.push({ provider: instanceId, model });
-      }
-      updateSettings({ favorites: newFavorites });
+      const isActiveModel = instanceId === props.activeInstanceId && model === props.model;
+      updateSettings({
+        favorites: toggleModelFavorite(favorites, {
+          instanceId,
+          model,
+          options: isActiveModel ? props.selectionOptions : [],
+        }),
+      });
     },
-    [favorites, updateSettings],
+    [favorites, props.activeInstanceId, props.model, props.selectionOptions, updateSettings],
   );
 
   const modelJumpCommandByKey = useMemo(() => {
@@ -769,6 +797,9 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                         useTriggerLabel={false}
                         showNewBadge={isModelPickerNewModel(model.driverKind, model.slug)}
                         jumpLabel={modelJumpLabelByKey.get(modelKey) ?? null}
+                        favoriteConfigurationLabel={getModelFavoriteEffortLabel(
+                          favoriteByKey.get(providerModelKey(model.instanceId, model.slug)),
+                        )}
                         disabledReason={disabledReason}
                         onToggleFavorite={() => toggleFavorite(model.instanceId, model.slug)}
                       />

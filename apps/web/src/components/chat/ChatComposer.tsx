@@ -5,6 +5,7 @@ import type {
   PreviewAnnotationPayload,
   ProviderApprovalDecision,
   ProviderInteractionMode,
+  ProviderOptionSelection,
   ResolvedKeybindingsConfig,
   RuntimeMode,
   ScopedThreadRef,
@@ -653,7 +654,11 @@ export interface ChatComposerProps {
     cursorAdjacentToMention: boolean,
   ) => void;
 
-  onProviderModelSelect: (instanceId: ProviderInstanceId, model: string) => void;
+  onProviderModelSelect: (
+    instanceId: ProviderInstanceId,
+    model: string,
+    savedOptions?: ReadonlyArray<ProviderOptionSelection>,
+  ) => void;
   getModelDisabledReason: (instanceId: ProviderInstanceId, model: string) => string | null;
   toggleInteractionMode: () => void;
   handleRuntimeModeChange: (mode: RuntimeMode) => void;
@@ -3495,6 +3500,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       instanceEntries={providerInstanceEntries}
                       keybindings={keybindings}
                       modelOptionsByInstance={modelOptionsByInstance}
+                      selectionOptions={selectedModelOptionsForDispatch ?? []}
                       triggerClassName="-ms-2.5"
                       terminalOpen={terminalOpen}
                       open={isComposerModelPickerOpen}

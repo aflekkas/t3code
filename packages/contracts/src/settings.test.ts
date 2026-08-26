@@ -66,6 +66,32 @@ describe("ClientSettings word wrap", () => {
   });
 });
 
+describe("ClientSettings model favorites", () => {
+  it("keeps legacy model-only favorites valid", () => {
+    expect(
+      decodeClientSettings({ favorites: [{ provider: "codex", model: "gpt-5.6-sol" }] }).favorites,
+    ).toEqual([{ provider: ProviderInstanceId.make("codex"), model: "gpt-5.6-sol" }]);
+  });
+
+  it("decodes saved reasoning options in settings and patches", () => {
+    const favorite = {
+      provider: "codex",
+      model: "gpt-5.6-sol",
+      options: { reasoningEffort: "high" },
+    };
+    const expected = [
+      {
+        provider: ProviderInstanceId.make("codex"),
+        model: "gpt-5.6-sol",
+        options: [{ id: "reasoningEffort", value: "high" }],
+      },
+    ];
+
+    expect(decodeClientSettings({ favorites: [favorite] }).favorites).toEqual(expected);
+    expect(decodeClientSettingsPatch({ favorites: [favorite] }).favorites).toEqual(expected);
+  });
+});
+
 describe("ClientSettings glass opacity", () => {
   it("defaults to a readable translucent surface", () => {
     expect(decodeClientSettings({}).glassOpacity).toBe(80);

@@ -35,6 +35,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
   useTriggerLabel?: boolean;
   showNewBadge?: boolean;
   jumpLabel?: string | null;
+  favoriteConfigurationLabel?: string | null;
   disabledReason?: string | null;
   onToggleFavorite: () => void;
 }) {
@@ -82,6 +83,14 @@ export const ModelListRow = memo(function ModelListRow(props: {
             <span className="truncate text-xs font-normal leading-snug text-muted-foreground/70">
               {providerLabel}
             </span>
+            {props.favoriteConfigurationLabel ? (
+              <>
+                <span className="text-xs text-muted-foreground/50">·</span>
+                <span className="shrink-0 text-xs font-medium leading-snug text-muted-foreground">
+                  {props.favoriteConfigurationLabel}
+                </span>
+              </>
+            ) : null}
           </div>
         )}
       </div>

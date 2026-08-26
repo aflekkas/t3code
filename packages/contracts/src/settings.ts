@@ -125,6 +125,19 @@ export type EnvironmentIdentificationMode = typeof EnvironmentIdentificationMode
 export const DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE: EnvironmentIdentificationMode = "artwork";
 
 /**
+ * A model-picker favorite. `options` is optional so favorites written before
+ * configuration snapshots were introduced continue to decode as model-only
+ * favorites. New favorites include the complete provider option bundle,
+ * including reasoning effort, so selecting one can restore the configuration.
+ */
+export const ModelFavorite = Schema.Struct({
+  provider: ProviderInstanceId,
+  model: TrimmedNonEmptyString,
+  options: Schema.optionalKey(ProviderOptionSelections),
+});
+export type ModelFavorite = typeof ModelFavorite.Type;
+
+/**
  * A user-chosen font family (a single name or a comma-separated list). Empty
  * means "use the app default"; clients compose their own fallback stacks.
  */
@@ -206,12 +219,7 @@ export const ClientSettingsSchema = Schema.Struct({
   // default instance for their kind (because `defaultInstanceIdForDriver(kind)`
   // uses the same slug). The field name is kept as `provider` for storage
   // stability; new call sites should treat the value as an instance id.
-  favorites: Schema.Array(
-    Schema.Struct({
-      provider: ProviderInstanceId,
-      model: TrimmedNonEmptyString,
-    }),
-  ).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  favorites: Schema.Array(ModelFavorite).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   providerModelPreferences: Schema.Record(
     ProviderInstanceId,
     Schema.Struct({
@@ -917,14 +925,7 @@ export const ClientSettingsPatch = Schema.Struct({
   fontFamilySans: Schema.optionalKey(FontFamilyPreference),
   fontFamilyTerminal: Schema.optionalKey(FontFamilyPreference),
   fontSmoothing: Schema.optionalKey(Schema.Boolean),
-  favorites: Schema.optionalKey(
-    Schema.Array(
-      Schema.Struct({
-        provider: ProviderInstanceId,
-        model: TrimmedNonEmptyString,
-      }),
-    ),
-  ),
+  favorites: Schema.optionalKey(Schema.Array(ModelFavorite)),
   providerModelPreferences: Schema.optionalKey(
     Schema.Record(
       ProviderInstanceId,

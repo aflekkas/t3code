@@ -14,7 +14,7 @@ import {
   type ProviderInstanceId,
   resolveProviderInstanceEnabled,
 } from "@t3tools/contracts";
-import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import { DEFAULT_UNIFIED_SETTINGS, type ModelFavorite } from "@t3tools/contracts/settings";
 import {
   getBackgroundActivityPresetSettings,
   resolveServerBackgroundActivitySettings,
@@ -110,7 +110,7 @@ function withoutProviderInstanceKey<V>(
 }
 
 function withoutProviderInstanceFavorites(
-  favorites: ReadonlyArray<{ readonly provider: ProviderInstanceId; readonly model: string }>,
+  favorites: ReadonlyArray<ModelFavorite>,
   instanceId: ProviderInstanceId,
 ) {
   return favorites.filter((favorite) => favorite.provider !== instanceId);
@@ -640,10 +640,17 @@ export function EnvironmentProviderSettings({
         }),
       ),
     ];
+    const existingFavorites = new Map(
+      (settings.favorites ?? [])
+        .filter((favorite) => favorite.provider === instanceId)
+        .map((favorite) => [favorite.model, favorite]),
+    );
     updateSettings({
       favorites: [
         ...withoutProviderInstanceFavorites(settings.favorites ?? [], instanceId),
-        ...favoriteModels.map((model) => ({ provider: instanceId, model })),
+        ...favoriteModels.map(
+          (model) => existingFavorites.get(model) ?? { provider: instanceId, model },
+        ),
       ],
     });
   };

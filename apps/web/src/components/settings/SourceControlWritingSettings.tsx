@@ -15,6 +15,7 @@ import {
   getCustomModelOptionsByInstance,
   resolveAppModelSelectionState,
 } from "../../modelSelection";
+import { buildModelFavoriteOptions } from "../../modelFavorites";
 import { primaryServerProvidersAtom } from "../../state/server";
 import { ProviderModelPicker } from "../chat/ProviderModelPicker";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
@@ -69,6 +70,12 @@ export function SourceControlWritingSettingsSection() {
     activeSelection.instanceId,
     activeSelection.model,
   );
+  const activeInstanceEntry = instanceEntries.find(
+    (entry) => entry.instanceId === activeSelection.instanceId,
+  );
+  const favoriteSelectionOptions = activeInstanceEntry
+    ? buildModelFavoriteOptions(activeSelection, activeInstanceEntry.models)
+    : [];
 
   return (
     <SettingsSection title="Text generation">
@@ -180,12 +187,17 @@ export function SourceControlWritingSettingsSection() {
                 lockedProvider={null}
                 instanceEntries={instanceEntries}
                 modelOptionsByInstance={modelOptionsByInstance}
+                selectionOptions={favoriteSelectionOptions}
                 triggerVariant="outline"
                 triggerClassName="min-w-0 max-w-none shrink-0 text-foreground/90 hover:text-foreground"
                 triggerAriaLabel="Source control writer model"
-                onInstanceModelChange={(instanceId, model) => {
+                onInstanceModelChange={(instanceId, model, savedOptions) => {
                   updateSettings({
-                    sourceControlWriterModelSelection: createModelSelection(instanceId, model),
+                    sourceControlWriterModelSelection: createModelSelection(
+                      instanceId,
+                      model,
+                      savedOptions,
+                    ),
                   });
                 }}
               />

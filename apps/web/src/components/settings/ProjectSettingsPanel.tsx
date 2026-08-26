@@ -61,6 +61,7 @@ import {
   sortProviderInstanceEntries,
 } from "../../providerInstances";
 import { getCustomModelOptionsByInstance } from "../../modelSelection";
+import { buildModelFavoriteOptions } from "../../modelFavorites";
 import {
   buildSidebarProjectSnapshots,
   type SidebarProjectGroupMember,
@@ -431,6 +432,10 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
   const activeEntry = instanceEntries.find(
     (entry) => entry.instanceId === resolvedSelection?.instanceId,
   );
+  const favoriteSelectionOptions =
+    resolvedSelection && activeEntry
+      ? buildModelFavoriteOptions(resolvedSelection, activeEntry.models)
+      : [];
   const setDefaultModel = useCallback(
     (selection: ModelSelection | null) =>
       void updateAllMembers({ defaultModelSelection: selection }, "Failed to update default model"),
@@ -846,10 +851,11 @@ function ProjectDetail({ group }: { group: SidebarProjectSnapshot }) {
                     lockedProvider={null}
                     instanceEntries={instanceEntries}
                     modelOptionsByInstance={modelOptionsByInstance}
+                    selectionOptions={favoriteSelectionOptions}
                     triggerVariant="outline"
                     triggerClassName="min-w-0 max-w-none shrink-0 text-foreground/90 hover:text-foreground"
-                    onInstanceModelChange={(instanceId, model) => {
-                      setDefaultModel(createModelSelection(instanceId, model));
+                    onInstanceModelChange={(instanceId, model, savedOptions) => {
+                      setDefaultModel(createModelSelection(instanceId, model, savedOptions));
                     }}
                   />
                   <TraitsPicker

@@ -1,6 +1,7 @@
 import {
   type ProviderInstanceId,
   type ProviderDriverKind,
+  type ProviderOptionSelection,
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
 import { memo, useEffect, useMemo, useState } from "react";
@@ -32,6 +33,8 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   instanceEntries: ReadonlyArray<ProviderInstanceEntry>;
   keybindings?: ResolvedKeybindingsConfig;
   modelOptionsByInstance: ReadonlyMap<ProviderInstanceId, ReadonlyArray<ModelEsque>>;
+  /** Complete option snapshot for the active model, saved when it is favorited. */
+  selectionOptions?: ReadonlyArray<ProviderOptionSelection>;
   activeProviderIconClassName?: string;
   compact?: boolean;
   disabled?: boolean;
@@ -42,7 +45,11 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   triggerAriaLabel?: string;
   onOpenChange?: (open: boolean) => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
-  onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
+  onInstanceModelChange: (
+    instanceId: ProviderInstanceId,
+    model: string,
+    savedOptions?: ReadonlyArray<ProviderOptionSelection>,
+  ) => void;
 }) {
   const [uncontrolledIsMenuOpen, setUncontrolledIsMenuOpen] = useState(false);
   const isMenuOpen = props.open ?? uncontrolledIsMenuOpen;
@@ -125,9 +132,13 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
     };
   }, [isMenuOpen]);
 
-  const handleInstanceModelChange = (instanceId: ProviderInstanceId, model: string) => {
+  const handleInstanceModelChange = (
+    instanceId: ProviderInstanceId,
+    model: string,
+    savedOptions?: ReadonlyArray<ProviderOptionSelection>,
+  ) => {
     if (props.disabled) return;
-    props.onInstanceModelChange(instanceId, model);
+    props.onInstanceModelChange(instanceId, model, savedOptions);
     setIsMenuOpen(false);
   };
 
@@ -197,6 +208,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           instanceEntries={props.instanceEntries}
           {...(props.keybindings ? { keybindings: props.keybindings } : {})}
           modelOptionsByInstance={props.modelOptionsByInstance}
+          selectionOptions={props.selectionOptions ?? []}
           terminalOpen={props.terminalOpen ?? false}
           onRequestClose={() => setIsMenuOpen(false)}
           {...(props.getModelDisabledReason
