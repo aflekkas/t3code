@@ -45,7 +45,7 @@ import { providerModelKey, sortProviderModelItems } from "../../modelOrdering";
 import {
   findModelFavorite,
   getModelFavoriteEffortLabel,
-  toggleModelFavorite,
+  toggleModelFavoriteForSelection,
 } from "../../modelFavorites";
 
 type ModelPickerItem = {
@@ -470,16 +470,27 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
 
   const toggleFavorite = useCallback(
     (instanceId: ProviderInstanceId, model: string) => {
-      const isActiveModel = instanceId === props.activeInstanceId && model === props.model;
+      const entry = entryByInstanceId.get(instanceId);
+      if (!entry) {
+        return;
+      }
       updateSettings({
-        favorites: toggleModelFavorite(favorites, {
-          instanceId,
-          model,
-          options: isActiveModel ? props.selectionOptions : [],
+        favorites: toggleModelFavoriteForSelection(favorites, {
+          selection: { instanceId, model },
+          activeSelection: { instanceId: props.activeInstanceId, model: props.model },
+          activeOptions: props.selectionOptions,
+          models: entry.models,
         }),
       });
     },
-    [favorites, props.activeInstanceId, props.model, props.selectionOptions, updateSettings],
+    [
+      entryByInstanceId,
+      favorites,
+      props.activeInstanceId,
+      props.model,
+      props.selectionOptions,
+      updateSettings,
+    ],
   );
 
   const modelJumpCommandByKey = useMemo(() => {
@@ -799,6 +810,9 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                         jumpLabel={modelJumpLabelByKey.get(modelKey) ?? null}
                         favoriteConfigurationLabel={getModelFavoriteEffortLabel(
                           favoriteByKey.get(providerModelKey(model.instanceId, model.slug)),
+                          entryByInstanceId
+                            .get(model.instanceId)
+                            ?.models.find((candidate) => candidate.slug === model.slug),
                         )}
                         disabledReason={disabledReason}
                         onToggleFavorite={() => toggleFavorite(model.instanceId, model.slug)}

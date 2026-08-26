@@ -12,9 +12,10 @@ the composer or paste them into a message.
 
 ## Favorite model configurations
 
-The star beside a model saves the active model configuration, including reasoning effort and other
-model options. Selecting that favorite later restores the saved options along with the model. To
-replace a saved configuration, remove the favorite, choose the options you want, and add it again.
+The star beside the selected model saves its active configuration, including reasoning effort and
+other model options. Starring a different model saves that model's current defaults. Selecting a
+favorite later restores the saved options along with the model. To replace a saved configuration,
+remove the favorite, choose the options you want, and add it again.
 
 Favorites created by an older version of T3 Code remain model-only and keep the current options when
 selected.

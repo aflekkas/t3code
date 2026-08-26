@@ -16,9 +16,13 @@ const EFFORT_LABELS: Readonly<Record<string, string>> = {
   low: "Low",
   medium: "Medium",
   high: "High",
-  xhigh: "XHigh",
+  xhigh: "Extra High",
   max: "Max",
   adaptive: "Adaptive",
+  ultra: "Ultra",
+  ultracode: "Ultracode",
+  ultrathink: "Ultrathink",
+  none: "None",
 };
 
 export function findModelFavorite(
@@ -67,12 +71,46 @@ export function toggleModelFavorite(
   ];
 }
 
-export function getModelFavoriteEffortLabel(favorite: ModelFavorite | undefined): string | null {
+export function toggleModelFavoriteForSelection(
+  favorites: ReadonlyArray<ModelFavorite>,
+  input: {
+    readonly selection: ModelSelection;
+    readonly activeSelection: ModelSelection;
+    readonly activeOptions: ReadonlyArray<ProviderOptionSelection>;
+    readonly models: ReadonlyArray<ServerProviderModel>;
+  },
+): ModelFavorite[] {
+  const { selection } = input;
+  const isActiveModel =
+    selection.instanceId === input.activeSelection.instanceId &&
+    selection.model === input.activeSelection.model;
+
+  return toggleModelFavorite(favorites, {
+    instanceId: selection.instanceId,
+    model: selection.model,
+    options: isActiveModel
+      ? input.activeOptions
+      : buildModelFavoriteOptions(selection, input.models),
+  });
+}
+
+export function getModelFavoriteEffortLabel(
+  favorite: ModelFavorite | undefined,
+  model?: ServerProviderModel,
+): string | null {
   const effort = favorite?.options?.find(
     (selection) => EFFORT_OPTION_IDS.has(selection.id) && typeof selection.value === "string",
   );
   if (!effort || typeof effort.value !== "string") {
     return null;
+  }
+  const providerLabel = model?.capabilities?.optionDescriptors
+    ?.flatMap((descriptor) =>
+      descriptor.type === "select" && descriptor.id === effort.id ? descriptor.options : [],
+    )
+    .find((option) => option.id === effort.value)?.label;
+  if (providerLabel) {
+    return providerLabel;
   }
   return EFFORT_LABELS[effort.value] ?? effort.value;
 }
