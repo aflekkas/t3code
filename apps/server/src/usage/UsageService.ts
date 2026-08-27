@@ -1,13 +1,15 @@
 /**
  * UsageService - scans provider transcripts and returns priced usage buckets.
  *
- * The scan reads the provider CLIs' own session files (Claude Code, Codex, and
- * Grok Build) rather than T3 Code's orchestration projections, so usage covers
- * turns driven outside T3 Code too. This is the approach `ccusage` takes.
+ * The scan reads the provider CLIs' own session stores (Claude Code, Codex,
+ * Grok Build, and OpenCode) rather than T3 Code's orchestration projections,
+ * so usage covers turns driven outside T3 Code too. This is the approach
+ * `ccusage` takes.
  *
- * Transcripts are append-only, so parsed records are memoised per file by
- * `(size, mtime)`. A cold 30-day scan of ~1.4 GB lands around 2-3 seconds; warm
- * scans only reparse files that changed.
+ * JSONL transcripts are append-only, so parsed records are memoised per file
+ * by `(size, mtime)`. OpenCode's windowed SQLite query is read fresh. A cold
+ * 30-day JSONL scan of ~1.4 GB lands around 2-3 seconds; warm scans only reparse
+ * files that changed.
  *
  * @module UsageService
  */
@@ -15,7 +17,6 @@ import * as NodeOS from "node:os";
 
 import {
   USAGE_CONTRACT_VERSION,
-  type UsageProviderKind,
   type UsageSource,
   type UsageSummary,
   type UsageSummaryInput,
@@ -46,6 +47,7 @@ import {
   readDirectoryVolumeId,
   readTranscriptRecords,
 } from "./usageTranscriptReader.ts";
+import { readOpenCodeUsage, resolveOpenCodeDatabasePaths } from "./usageOpenCode.ts";
 import {
   decodeScanCache,
   dedupeWithinFile,
@@ -53,7 +55,7 @@ import {
   pruneScanCache,
   type ScanCache,
 } from "./usageScanCache.ts";
-import type { UsageRecord } from "./usageTranscripts.ts";
+import type { UsageRecord, UsageTranscriptProviderKind } from "./usageTranscripts.ts";
 
 const LITELLM_RATES_URL =
   "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
@@ -240,6 +242,38 @@ export const make = Effect.gen(function* () {
     ];
   });
 
+  /** Resolves every persisted database the installed OpenCode channel can use. */
+  const resolveOpenCodeDatabases = Effect.fn("UsageService.resolveOpenCodeDatabases")(function* () {
+    const xdgDataHome = hostEnvironment["XDG_DATA_HOME"]?.trim() ?? "";
+    const dataRoot =
+      xdgDataHome.length > 0
+        ? path.resolve(expandHomePath(xdgDataHome))
+        : path.join(NodeOS.homedir(), ".local", "share");
+    const dataDirectory = path.join(dataRoot, "opencode");
+    const directoryEntries = yield* fileSystem
+      .readDirectory(dataDirectory)
+      .pipe(Effect.catchCause(() => Effect.succeed([] as const)));
+
+    const databasePaths = resolveOpenCodeDatabasePaths({
+      dataDirectory,
+      databaseOverride: hostEnvironment["OPENCODE_DB"],
+      disableChannelDatabase: hostEnvironment["OPENCODE_DISABLE_CHANNEL_DB"],
+      directoryEntries,
+      path,
+    });
+    const hasOverride = (hostEnvironment["OPENCODE_DB"]?.trim().length ?? 0) > 0;
+    return {
+      databasePaths,
+      // Buckets are provider-scoped rather than source-scoped. Treat all
+      // channel databases as one source so another environment cannot claim
+      // one database and accidentally merge duplicate buckets from another.
+      sourcePath:
+        hasOverride && databasePaths.length === 1
+          ? (databasePaths[0] ?? dataDirectory)
+          : dataDirectory,
+    };
+  });
+
   /**
    * Loads the persisted scan cache exactly once per process.
    *
@@ -277,7 +311,7 @@ export const make = Effect.gen(function* () {
     filePath: string,
     size: number,
     mtimeMs: number,
-    provider: UsageProviderKind,
+    provider: UsageTranscriptProviderKind,
   ): Effect.Effect<readonly UsageRecord[]> =>
     Effect.gen(function* () {
       const cached = fileCache.get(filePath);
@@ -345,6 +379,7 @@ export const make = Effect.gen(function* () {
     // The home resolvers ask for `Path` themselves; satisfy them from the
     // instance we already hold so `readSummary` stays context-free.
     const dirs = yield* resolveTranscriptDirs().pipe(Effect.provideService(Path.Path, path));
+    const openCode = yield* resolveOpenCodeDatabases();
     const windowStart = DateTime.make(`${input.sinceDay}T00:00:00Z`);
     if (Option.isNone(windowStart)) {
       return yield* new UsageReadError({
@@ -422,6 +457,61 @@ export const make = Effect.gen(function* () {
         malformedRecords: 0,
         distinctSessions: sessionIds.size,
         message: null,
+      });
+    }
+
+    if (openCode.databasePaths.length > 0) {
+      const volumeId = yield* Effect.promise(() => readDirectoryVolumeId(openCode.sourcePath));
+      const sessionIds = new Set<string>();
+      let existingDatabases = 0;
+      let scannedFiles = 0;
+      let skippedFiles = 0;
+      let malformedRecords = 0;
+
+      for (const databasePath of openCode.databasePaths) {
+        const exists = yield* fileSystem
+          .exists(databasePath)
+          .pipe(Effect.catchCause(() => Effect.succeed(false)));
+        if (!exists) continue;
+        existingDatabases += 1;
+
+        const result = yield* Effect.promise(() => readOpenCodeUsage(databasePath, windowStartMs));
+        if (result === null) {
+          skippedFiles += 1;
+          continue;
+        }
+
+        scannedFiles += 1;
+        malformedRecords += result.malformedRecords;
+        for (const record of result.records) {
+          if (aggregator.add(record) && record.sessionId.length > 0) {
+            sessionIds.add(record.sessionId);
+          }
+        }
+      }
+
+      const missing = existingDatabases === 0;
+      const failed = existingDatabases > 0 && scannedFiles === 0;
+      const partial = !missing && !failed && (skippedFiles > 0 || malformedRecords > 0);
+      sources.push({
+        fingerprint: {
+          hostId,
+          provider: "opencode",
+          resolvedHomePath: openCode.sourcePath,
+          volumeId,
+        },
+        status: missing ? "missing" : failed ? "failed" : partial ? "partial" : "ok",
+        scannedFiles,
+        skippedFiles,
+        malformedRecords,
+        distinctSessions: sessionIds.size,
+        message: missing
+          ? "No usage database on this environment."
+          : failed
+            ? "The usage database could not be read."
+            : partial
+              ? "Some OpenCode usage databases or rows were skipped."
+              : null,
       });
     }
 
