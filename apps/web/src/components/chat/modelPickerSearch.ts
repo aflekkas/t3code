@@ -12,6 +12,8 @@ type ModelPickerSearchableModel = {
   name: string;
   shortName?: string;
   subProvider?: string;
+  /** Zero-cost models are discoverable with the search term "free". */
+  isFree?: boolean;
   isFavorite?: boolean;
 };
 
@@ -22,6 +24,7 @@ function getModelPickerSearchFields(model: ModelPickerSearchableModel): string[]
     normalizeSearchQuery(model.name),
     ...(model.shortName ? [normalizeSearchQuery(model.shortName)] : []),
     ...(model.subProvider ? [normalizeSearchQuery(model.subProvider)] : []),
+    ...(model.isFree ? ["free"] : []),
     normalizeSearchQuery(model.driverKind),
     normalizeSearchQuery(model.providerDisplayName),
     buildModelPickerSearchText(model),
@@ -46,7 +49,14 @@ function scoreModelPickerSearchToken(
 
 export function buildModelPickerSearchText(model: ModelPickerSearchableModel): string {
   return normalizeSearchQuery(
-    [model.name, model.shortName, model.subProvider, model.driverKind, model.providerDisplayName]
+    [
+      model.name,
+      model.shortName,
+      model.subProvider,
+      model.isFree ? "free" : undefined,
+      model.driverKind,
+      model.providerDisplayName,
+    ]
       .filter((value): value is string => typeof value === "string" && value.length > 0)
       .join(" "),
   );
@@ -62,6 +72,12 @@ export function scoreModelPickerSearch(
 
   if (tokens.length === 0) {
     return 0;
+  }
+
+  // Treat the complete keyword as a semantic filter instead of allowing
+  // fuzzy name matches to mix paid or unpriced models into the results.
+  if (tokens.includes("free") && !model.isFree) {
+    return null;
   }
 
   const fields = getModelPickerSearchFields(model);

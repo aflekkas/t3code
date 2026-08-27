@@ -13,6 +13,17 @@ describe("buildModelPickerSearchText", () => {
       }),
     ).toBe("claude opus 4.7 github copilot opencode opencode");
   });
+
+  it("indexes zero-cost models as free", () => {
+    expect(
+      buildModelPickerSearchText({
+        driverKind: "opencode",
+        providerDisplayName: "opencode",
+        name: "Big Pickle",
+        isFree: true,
+      }),
+    ).toBe("big pickle free opencode opencode");
+  });
 });
 
 describe("scoreModelPickerSearch", () => {
@@ -125,6 +136,32 @@ describe("scoreModelPickerSearch", () => {
           name: "GPT-5 Codex",
         },
         "personal",
+      ),
+    ).not.toBeNull();
+  });
+
+  it("matches free models even when their name does not contain free", () => {
+    const model = {
+      driverKind: "opencode",
+      providerDisplayName: "opencode",
+      name: "Big Pickle",
+    };
+
+    expect(scoreModelPickerSearch({ ...model, isFree: true }, "free")).not.toBeNull();
+    expect(scoreModelPickerSearch(model, "free")).toBeNull();
+    expect(scoreModelPickerSearch({ ...model, name: "Free Trial" }, "free")).toBeNull();
+  });
+
+  it("combines free with other provider or model search terms", () => {
+    expect(
+      scoreModelPickerSearch(
+        {
+          driverKind: "opencode",
+          providerDisplayName: "opencode",
+          name: "Big Pickle",
+          isFree: true,
+        },
+        "opencode free pickle",
       ),
     ).not.toBeNull();
   });
