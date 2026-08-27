@@ -58,7 +58,7 @@ function settingsWithProviderInstances(): UnifiedSettings {
 }
 
 describe("instance-scoped model selection", () => {
-  it("preserves server-provided legacy model metadata", () => {
+  it("preserves server-provided model metadata", () => {
     const baseProvider = provider({
       instanceId: "claudeAgent",
       models: ["claude-opus-4-8"],
@@ -66,14 +66,15 @@ describe("instance-scoped model selection", () => {
     const providers = [
       {
         ...baseProvider,
-        models: [{ ...baseProvider.models[0]!, isLegacy: true }],
+        models: [{ ...baseProvider.models[0]!, isFree: true, isLegacy: true }],
       },
     ];
     const stock = deriveProviderInstanceEntries(providers)[0]!;
 
-    expect(getAppModelOptionsForInstance(settingsWithProviderInstances(), stock)[0]?.isLegacy).toBe(
-      true,
-    );
+    expect(getAppModelOptionsForInstance(settingsWithProviderInstances(), stock)[0]).toMatchObject({
+      isFree: true,
+      isLegacy: true,
+    });
   });
 
   it("keeps custom models on the provider instance that declared them", () => {
