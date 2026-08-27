@@ -75,6 +75,14 @@ export const ModelListRow = memo(function ModelListRow(props: {
               New
             </span>
           ) : null}
+          {props.model.isFree ? (
+            <span
+              className="shrink-0 rounded border border-success/30 bg-success/10 px-1 py-px text-[10px] font-bold uppercase leading-none tracking-wide text-success-foreground"
+              aria-label="Free model"
+            >
+              Free
+            </span>
+          ) : null}
         </div>
         {props.showProvider && (
           <div className="mt-1 flex items-center gap-1.5">

@@ -16,6 +16,7 @@ export type ModelOption = {
   readonly providerLabel: string;
   readonly providerDriver: string;
   readonly isDefault: boolean;
+  readonly isFree: boolean;
   readonly isLegacy: boolean;
   readonly capabilities: ModelCapabilities | null;
   readonly selection: ModelSelection;
@@ -126,6 +127,7 @@ export function buildModelOptions(
         providerLabel,
         providerDriver: provider.driver,
         isDefault: model.isDefault === true,
+        isFree: model.isFree === true,
         isLegacy: model.isLegacy === true,
         capabilities: model.capabilities,
         selection: normalizeSelectionOptions(
@@ -157,6 +159,7 @@ export function buildModelOptions(
         providerLabel,
         providerDriver: fallbackModelSelection.instanceId,
         isDefault: false,
+        isFree: false,
         isLegacy: false,
         capabilities: null,
         selection: fallbackModelSelection,

@@ -94,7 +94,7 @@ function ModelRow(props: {
   const checkmarkColor = useThemeColor("--color-icon");
   return (
     <Pressable
-      accessibilityLabel={props.option.label}
+      accessibilityLabel={`${props.option.label}${props.option.isFree ? ", Free" : ""}`}
       accessibilityRole="radio"
       accessibilityState={{ checked: props.selected }}
       onPress={props.onPress}
@@ -110,6 +110,11 @@ function ModelRow(props: {
       {props.option.isDefault ? (
         <View className="rounded-md bg-subtle-strong px-1.5 py-0.5">
           <Text className="text-3xs font-t3-bold text-foreground-muted">Default</Text>
+        </View>
+      ) : null}
+      {props.option.isFree ? (
+        <View className="rounded-md bg-emerald-500/12 px-1.5 py-0.5 dark:bg-emerald-500/16">
+          <Text className="text-3xs font-t3-bold text-emerald-700 dark:text-emerald-300">Free</Text>
         </View>
       ) : null}
       {props.option.isLegacy ? (

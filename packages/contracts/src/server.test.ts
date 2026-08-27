@@ -92,7 +92,7 @@ describe("ServerProvider", () => {
     expect(parsed.continuation?.groupKey).toBe("codex:home:/Users/julius/.codex");
   });
 
-  it("decodes optional legacy model metadata", () => {
+  it("decodes optional model metadata", () => {
     const parsed = decodeServerProvider({
       instanceId: "codex",
       driver: "codex",
@@ -107,12 +107,14 @@ describe("ServerProvider", () => {
           slug: "gpt-5.4",
           name: "GPT-5.4",
           isCustom: false,
+          isFree: true,
           isLegacy: true,
           capabilities: null,
         },
       ],
     });
 
+    expect(parsed.models[0]?.isFree).toBe(true);
     expect(parsed.models[0]?.isLegacy).toBe(true);
   });
 });

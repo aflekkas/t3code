@@ -26,6 +26,7 @@ export type ModelEsque = {
   name: string;
   shortName?: string | undefined;
   subProvider?: string | undefined;
+  isFree?: boolean | undefined;
   isLegacy?: boolean | undefined;
 };
 

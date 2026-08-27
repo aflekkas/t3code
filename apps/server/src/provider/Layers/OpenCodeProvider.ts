@@ -23,7 +23,7 @@ import {
   openCodeRuntimeErrorDetail,
   type OpenCodeInventory,
 } from "../opencodeRuntime.ts";
-import type { Agent, ProviderListResponse } from "@opencode-ai/sdk/v2";
+import type { Agent, Model, ProviderListResponse } from "@opencode-ai/sdk/v2";
 
 const OPENCODE_PRESENTATION = {
   displayName: "OpenCode",
@@ -169,6 +169,27 @@ const DEFAULT_OPENCODE_MODEL_CAPABILITIES: ModelCapabilities = createModelCapabi
   optionDescriptors: [],
 });
 
+function isOpenCodeModelFree(cost: Model["cost"] | undefined): boolean {
+  if (!cost) {
+    return false;
+  }
+
+  const rates = [cost.input, cost.output, cost.cache.read, cost.cache.write];
+  for (const tier of cost.tiers ?? []) {
+    rates.push(tier.input, tier.output, tier.cache.read, tier.cache.write);
+  }
+  if (cost.experimentalOver200K) {
+    rates.push(
+      cost.experimentalOver200K.input,
+      cost.experimentalOver200K.output,
+      cost.experimentalOver200K.cache.read,
+      cost.experimentalOver200K.cache.write,
+    );
+  }
+
+  return rates.every((rate) => rate === 0);
+}
+
 function openCodeCapabilitiesForModel(input: {
   readonly providerID: string;
   readonly model: ProviderListResponse["all"][number]["models"][string];
@@ -239,6 +260,7 @@ function flattenOpenCodeModels(input: OpenCodeInventory): ReadonlyArray<ServerPr
         name,
         ...(subProvider ? { subProvider } : {}),
         isCustom: false,
+        ...(isOpenCodeModelFree(model.cost) ? { isFree: true } : {}),
         capabilities: openCodeCapabilitiesForModel({
           providerID: provider.id,
           model,

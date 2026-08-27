@@ -25,6 +25,7 @@ describe("mobile model options", () => {
               slug: "gpt-5.6-sol",
               name: "GPT-5.6 Sol",
               isCustom: false,
+              isFree: true,
               capabilities: null,
             },
             {
@@ -44,8 +45,13 @@ describe("mobile model options", () => {
         providerKey: "codex",
         providerLabel: "Codex",
         models: [
-          { key: "codex:gpt-5.6-sol", label: "GPT-5.6 Sol", isLegacy: false },
-          { key: "codex:gpt-5.4", label: "GPT-5.4", isLegacy: true },
+          {
+            key: "codex:gpt-5.6-sol",
+            label: "GPT-5.6 Sol",
+            isFree: true,
+            isLegacy: false,
+          },
+          { key: "codex:gpt-5.4", label: "GPT-5.4", isFree: false, isLegacy: true },
         ],
       },
     ]);

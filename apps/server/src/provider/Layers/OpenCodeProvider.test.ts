@@ -213,6 +213,83 @@ it.layer(testLayer)("checkOpenCodeProviderStatus", (it) => {
     }),
   );
 
+  it.effect("marks only models with zero rates in every token category as free", () =>
+    Effect.gen(function* () {
+      const zeroCost = {
+        input: 0,
+        output: 0,
+        cache: { read: 0, write: 0 },
+      };
+      runtimeMock.state.inventory = {
+        providerList: {
+          connected: ["opencode"],
+          all: [
+            {
+              id: "opencode",
+              name: "OpenCode",
+              models: {
+                "big-pickle": {
+                  id: "big-pickle",
+                  name: "Big Pickle",
+                  variants: {},
+                  cost: zeroCost,
+                },
+                "paid-model": {
+                  id: "paid-model",
+                  name: "Paid Model",
+                  variants: {},
+                  cost: { ...zeroCost, output: 1 },
+                },
+                "tiered-model": {
+                  id: "tiered-model",
+                  name: "Tiered Model",
+                  variants: {},
+                  cost: {
+                    ...zeroCost,
+                    tiers: [
+                      {
+                        input: 0,
+                        output: 1,
+                        cache: { read: 0, write: 0 },
+                        tier: { type: "context", size: 200_000 },
+                      },
+                    ],
+                  },
+                },
+                "unpriced-model": {
+                  id: "unpriced-model",
+                  name: "Unpriced Model",
+                  variants: {},
+                },
+              },
+            },
+          ],
+          default: {},
+        },
+        agents: [],
+      };
+
+      const snapshot = yield* checkOpenCodeProviderStatus(makeOpenCodeSettings(), process.cwd());
+
+      NodeAssert.equal(
+        snapshot.models.find((model) => model.slug === "opencode/big-pickle")?.isFree,
+        true,
+      );
+      NodeAssert.equal(
+        snapshot.models.find((model) => model.slug === "opencode/paid-model")?.isFree,
+        undefined,
+      );
+      NodeAssert.equal(
+        snapshot.models.find((model) => model.slug === "opencode/tiered-model")?.isFree,
+        undefined,
+      );
+      NodeAssert.equal(
+        snapshot.models.find((model) => model.slug === "opencode/unpriced-model")?.isFree,
+        undefined,
+      );
+    }),
+  );
+
   it.effect("includes OpenCode skills in the provider snapshot", () =>
     Effect.gen(function* () {
       runtimeMock.state.inventory = {
