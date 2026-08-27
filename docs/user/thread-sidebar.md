@@ -1,5 +1,16 @@
 # Organizing threads
 
+## Continue in a new thread
+
+On web and desktop, open a thread's context menu and choose **Continue in new thread** to put its
+recent completed conversation into a fresh, editable draft. The draft stays in the same workspace
+and initially keeps the source provider, model, permission mode, and interaction mode. Choose any
+other configured provider before sending to hand the work to a different coding harness.
+
+This is a portable conversation handoff, not a copy of the provider's private session state. Tool
+state and image data do not transfer; attachment names remain in the handoff so you know what may
+need to be attached again.
+
 Pin a thread from its context menu to keep it in the pinned section above your active work.
 Pinned threads are shown independently of their project, including when you connect to more than
 one environment.
