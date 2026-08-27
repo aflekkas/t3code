@@ -115,7 +115,11 @@ it.effect("includes an OpenCode instance database override in the summary", () =
     });
 
     expect(
-      summary.sources.find((source) => source.fingerprint.provider === "opencode"),
+      summary.sources.find(
+        (source) =>
+          source.fingerprint.provider === "opencode" &&
+          source.fingerprint.resolvedHomePath === databasePath,
+      ),
     ).toMatchObject({
       status: "ok",
       scannedFiles: 1,
@@ -125,6 +129,7 @@ it.effect("includes an OpenCode instance database override in the summary", () =
     });
     expect(summary.buckets.find((bucket) => bucket.provider === "opencode")).toMatchObject({
       day: "2026-08-27",
+      sourcePath: databasePath,
       model: "openai/gpt-5.4",
       totals: {
         uncachedInputTokens: 5,

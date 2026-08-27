@@ -268,36 +268,17 @@ export const make = Effect.gen(function* () {
         const directoryEntries = yield* fileSystem
           .readDirectory(dataDirectory)
           .pipe(Effect.catchCause(() => Effect.succeed([] as const)));
-        const databasePaths = resolveOpenCodeDatabasePaths({
+        return resolveOpenCodeDatabasePaths({
           dataDirectory,
           databaseOverride: environment["OPENCODE_DB"],
           disableChannelDatabase: environment["OPENCODE_DISABLE_CHANNEL_DB"],
           directoryEntries,
           path,
         });
-        const hasOverride = (environment["OPENCODE_DB"]?.trim().length ?? 0) > 0;
-        return {
-          databasePaths,
-          sourcePath:
-            hasOverride && databasePaths.length === 1
-              ? (databasePaths[0] ?? dataDirectory)
-              : dataDirectory,
-        };
       }),
     );
 
-    const databasePaths = [...new Set(resolved.flatMap((entry) => entry.databasePaths))].sort(
-      (left, right) => left.localeCompare(right),
-    );
-    const sourcePaths = [...new Set(resolved.map((entry) => entry.sourcePath))].sort(
-      (left, right) => left.localeCompare(right),
-    );
-    return {
-      databasePaths,
-      // Usage buckets are provider-scoped, so all instance databases must be
-      // represented by one deterministic source fingerprint.
-      sourcePath: sourcePaths.join(", "),
-    };
+    return [...new Set(resolved.flat())].sort((left, right) => left.localeCompare(right));
   });
 
   /**
@@ -408,7 +389,9 @@ export const make = Effect.gen(function* () {
       Effect.provideService(Path.Path, path),
     );
     const dirs = resolvedSources.dirs;
-    const openCode = yield* resolveOpenCodeDatabases(resolvedSources.openCodeEnvironments);
+    const openCodeDatabasePaths = yield* resolveOpenCodeDatabases(
+      resolvedSources.openCodeEnvironments,
+    );
     const windowStart = DateTime.make(`${input.sinceDay}T00:00:00Z`);
     if (Option.isNone(windowStart)) {
       return yield* new UsageReadError({
@@ -489,62 +472,47 @@ export const make = Effect.gen(function* () {
       });
     }
 
-    if (openCode.databasePaths.length > 0) {
-      const volumeIds = yield* Effect.forEach(openCode.databasePaths, (databasePath) =>
-        Effect.promise(() => readDirectoryVolumeId(databasePath)),
-      );
-      const volumeId = [...new Set(volumeIds.filter((id) => id.length > 0))]
-        .sort((left, right) => left.localeCompare(right))
-        .join("|");
+    for (const databasePath of openCodeDatabasePaths) {
+      const volumeId = yield* Effect.promise(() => readDirectoryVolumeId(databasePath));
       const sessionIds = new Set<string>();
-      let existingDatabases = 0;
-      let scannedFiles = 0;
-      let skippedFiles = 0;
-      let malformedRecords = 0;
+      const exists = yield* fileSystem
+        .exists(databasePath)
+        .pipe(Effect.catchCause(() => Effect.succeed(false)));
+      const result = exists
+        ? yield* Effect.promise(() => readOpenCodeUsage(databasePath, windowStartMs))
+        : null;
+      const failed = exists && result === null;
+      const malformedRecords = result?.malformedRecords ?? 0;
 
-      for (const databasePath of openCode.databasePaths) {
-        const exists = yield* fileSystem
-          .exists(databasePath)
-          .pipe(Effect.catchCause(() => Effect.succeed(false)));
-        if (!exists) continue;
-        existingDatabases += 1;
-
-        const result = yield* Effect.promise(() => readOpenCodeUsage(databasePath, windowStartMs));
-        if (result === null) {
-          skippedFiles += 1;
-          continue;
-        }
-
-        scannedFiles += 1;
-        malformedRecords += result.malformedRecords;
+      if (result !== null) {
         for (const record of result.records) {
-          if (aggregator.add(record) && record.sessionId.length > 0) {
+          if (
+            aggregator.add({ ...record, sourcePath: databasePath }) &&
+            record.sessionId.length > 0
+          ) {
             sessionIds.add(record.sessionId);
           }
         }
       }
 
-      const missing = existingDatabases === 0;
-      const failed = existingDatabases > 0 && scannedFiles === 0;
-      const partial = !missing && !failed && (skippedFiles > 0 || malformedRecords > 0);
       sources.push({
         fingerprint: {
           hostId,
           provider: "opencode",
-          resolvedHomePath: openCode.sourcePath,
+          resolvedHomePath: databasePath,
           volumeId,
         },
-        status: missing ? "missing" : failed ? "failed" : partial ? "partial" : "ok",
-        scannedFiles,
-        skippedFiles,
+        status: !exists ? "missing" : failed ? "failed" : malformedRecords > 0 ? "partial" : "ok",
+        scannedFiles: result === null ? 0 : 1,
+        skippedFiles: failed ? 1 : 0,
         malformedRecords,
         distinctSessions: sessionIds.size,
-        message: missing
+        message: !exists
           ? "No usage database on this environment."
           : failed
             ? "The usage database could not be read."
-            : partial
-              ? "Some OpenCode usage databases or rows were skipped."
+            : malformedRecords > 0
+              ? "Some OpenCode usage rows were skipped."
               : null,
       });
     }

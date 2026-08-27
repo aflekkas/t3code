@@ -257,6 +257,62 @@ describe("mergeUsage", () => {
     expect(merged.duplicateSources).toHaveLength(1);
   });
 
+  it("deduplicates shared provider storage while keeping unique sources", () => {
+    const shared = {
+      provider: "opencode" as const,
+      hostId: "mac",
+      homePath: "/data/opencode.db",
+      volumeId: "16777220:1234",
+    };
+    const merged = mergeUsage(
+      [
+        environment(
+          "env-a",
+          summary(
+            [
+              bucket({ provider: "opencode", sourcePath: shared.homePath, costUsd: 10 }),
+              bucket({ provider: "opencode", sourcePath: "/work/a.db", costUsd: 3 }),
+            ],
+            [
+              shared,
+              {
+                provider: "opencode",
+                hostId: "mac",
+                homePath: "/work/a.db",
+                volumeId: "16777220:2000",
+              },
+            ],
+          ),
+        ),
+        environment(
+          "env-b",
+          summary(
+            [
+              bucket({ provider: "opencode", sourcePath: shared.homePath, costUsd: 10 }),
+              bucket({ provider: "opencode", sourcePath: "/work/b.db", costUsd: 4 }),
+            ],
+            [
+              shared,
+              {
+                provider: "opencode",
+                hostId: "mac",
+                homePath: "/work/b.db",
+                volumeId: "16777220:3000",
+              },
+            ],
+          ),
+        ),
+      ],
+      USAGE_CONTRACT_VERSION,
+    );
+
+    expect(merged.costUsd).toBe(17);
+    expect(merged.records).toBe(15);
+    expect(merged.sessions).toBe(3);
+    expect(merged.duplicateSources).toEqual(["env-b: /data/opencode.db"]);
+    expect(merged.contributingEnvironments).toEqual(["env-a", "env-b"]);
+  });
+
   it("totals sessions from per-directory distinct counts, not per-bucket sums", () => {
     // One session that spans two days appears in two buckets. Summing bucket
     // sessions would say 2; the source's distinct count says 1.

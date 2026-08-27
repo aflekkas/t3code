@@ -12,6 +12,8 @@ export type UsageTranscriptProviderKind = Exclude<UsageProviderKind, "opencode">
 
 export interface UsageRecord {
   readonly provider: UsageProviderKind;
+  /** Source provenance for providers that can read several independent stores. */
+  readonly sourcePath?: string;
   readonly timestampMs: number;
   readonly model: string;
   readonly sessionId: string;

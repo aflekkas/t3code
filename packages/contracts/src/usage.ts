@@ -8,8 +8,9 @@
  * stays complete even for turns that were never driven through T3 Code. This
  * mirrors the approach `ccusage` takes.
  *
- * Environments return pre-aggregated `(day, hourStart?, provider, model)`
- * buckets. Raw transcript records never cross the wire.
+ * Environments return pre-aggregated
+ * `(day, hourStart?, provider, sourcePath?, model)` buckets. Raw transcript
+ * records never cross the wire.
  *
  * @module usage
  */
@@ -27,7 +28,8 @@ export const USAGE_CONTRACT_VERSION = 6 as const;
 /**
  * Oldest {@link UsageSummary} version a current client will still merge.
  *
- * v5 only adds `grok` to {@link UsageProviderKind}; v6 adds `opencode`.
+ * v5 only adds `grok` to {@link UsageProviderKind}; v6 adds `opencode` and
+ * optional per-source bucket provenance.
  * v4 Claude/Codex buckets remain valid, so mixed-version environments keep
  * those totals instead of treating every older server as stale.
  */
@@ -82,8 +84,10 @@ export const UsageTokenTotals = Schema.Struct({
 export type UsageTokenTotals = typeof UsageTokenTotals.Type;
 
 /**
- * One `(day, hourStart?, provider, model)` cell. `hourStart` is the UTC start
- * instant of a rolling bucket and is present only for hourly requests.
+ * One `(day, hourStart?, provider, sourcePath?, model)` cell. `hourStart` is
+ * the UTC start instant of a rolling bucket and is present only for hourly
+ * requests. `sourcePath` links a bucket to one source when a provider can use
+ * several stores; older summaries and single-source providers omit it.
  *
  * `costUsd` is the raw API-equivalent cost of these tokens. It is not money
  * spent: subscription plans bill separately. `unpricedRecords` counts records
@@ -94,6 +98,7 @@ export const UsageBucket = Schema.Struct({
   day: UsageDay,
   hourStart: Schema.optional(TrimmedNonEmptyString),
   provider: UsageProviderKind,
+  sourcePath: Schema.optional(TrimmedNonEmptyString),
   model: TrimmedNonEmptyString,
   totals: UsageTokenTotals,
   costUsd: Schema.Number,
