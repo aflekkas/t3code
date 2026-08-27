@@ -37,6 +37,7 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 
 import { ServerConfig } from "../config.ts";
 import { expandHomePath } from "../pathExpansion.ts";
+import { mergeProviderInstanceEnvironment } from "../provider/ProviderInstanceEnvironment.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { resolveClaudeHomePath } from "../provider/Drivers/ClaudeHome.ts";
 import { resolveCodexHomeLayout } from "../provider/Drivers/CodexHomeLayout.ts";
@@ -202,7 +203,7 @@ export const make = Effect.gen(function* () {
       return nestedExists ? nested : path.join(homePath, "projects");
     });
 
-  /** Resolves the transcript directory for each provider. */
+  /** Resolves transcript directories and every OpenCode instance environment. */
   const resolveTranscriptDirs = Effect.fn("UsageService.resolveTranscriptDirs")(function* () {
     // A settings failure must surface as an error: swallowing it here would
     // present "zero usage from every provider" as a valid answer.
@@ -231,46 +232,71 @@ export const make = Effect.gen(function* () {
         ? path.resolve(expandHomePath(grokHomeEnv))
         : path.join(NodeOS.homedir(), ".grok");
 
-    return [
-      { provider: "claude" as const, dir: claudeDir },
-      { provider: "codex" as const, dir: path.join(codexLayout.sharedHomePath, "sessions") },
-      {
-        provider: "grok" as const,
-        dir: path.join(grokHome, "sessions"),
-        fileName: "updates.jsonl",
-      },
-    ];
+    return {
+      dirs: [
+        { provider: "claude" as const, dir: claudeDir },
+        { provider: "codex" as const, dir: path.join(codexLayout.sharedHomePath, "sessions") },
+        {
+          provider: "grok" as const,
+          dir: path.join(grokHome, "sessions"),
+          fileName: "updates.jsonl",
+        },
+      ],
+      openCodeEnvironments: [
+        hostEnvironment,
+        ...Object.values(settings.providerInstances)
+          .filter((instance) => instance.driver === "opencode")
+          .map((instance) =>
+            mergeProviderInstanceEnvironment(instance.environment, hostEnvironment),
+          ),
+      ],
+    };
   });
 
-  /** Resolves every persisted database the installed OpenCode channel can use. */
-  const resolveOpenCodeDatabases = Effect.fn("UsageService.resolveOpenCodeDatabases")(function* () {
-    const xdgDataHome = hostEnvironment["XDG_DATA_HOME"]?.trim() ?? "";
-    const dataRoot =
-      xdgDataHome.length > 0
-        ? path.resolve(expandHomePath(xdgDataHome))
-        : path.join(NodeOS.homedir(), ".local", "share");
-    const dataDirectory = path.join(dataRoot, "opencode");
-    const directoryEntries = yield* fileSystem
-      .readDirectory(dataDirectory)
-      .pipe(Effect.catchCause(() => Effect.succeed([] as const)));
+  /** Resolves every persisted database the installed OpenCode instances can use. */
+  const resolveOpenCodeDatabases = Effect.fn("UsageService.resolveOpenCodeDatabases")(function* (
+    environments: readonly NodeJS.ProcessEnv[],
+  ) {
+    const resolved = yield* Effect.forEach(environments, (environment) =>
+      Effect.gen(function* () {
+        const xdgDataHome = environment["XDG_DATA_HOME"]?.trim() ?? "";
+        const dataRoot =
+          xdgDataHome.length > 0
+            ? path.resolve(expandHomePath(xdgDataHome))
+            : path.join(NodeOS.homedir(), ".local", "share");
+        const dataDirectory = path.join(dataRoot, "opencode");
+        const directoryEntries = yield* fileSystem
+          .readDirectory(dataDirectory)
+          .pipe(Effect.catchCause(() => Effect.succeed([] as const)));
+        const databasePaths = resolveOpenCodeDatabasePaths({
+          dataDirectory,
+          databaseOverride: environment["OPENCODE_DB"],
+          disableChannelDatabase: environment["OPENCODE_DISABLE_CHANNEL_DB"],
+          directoryEntries,
+          path,
+        });
+        const hasOverride = (environment["OPENCODE_DB"]?.trim().length ?? 0) > 0;
+        return {
+          databasePaths,
+          sourcePath:
+            hasOverride && databasePaths.length === 1
+              ? (databasePaths[0] ?? dataDirectory)
+              : dataDirectory,
+        };
+      }),
+    );
 
-    const databasePaths = resolveOpenCodeDatabasePaths({
-      dataDirectory,
-      databaseOverride: hostEnvironment["OPENCODE_DB"],
-      disableChannelDatabase: hostEnvironment["OPENCODE_DISABLE_CHANNEL_DB"],
-      directoryEntries,
-      path,
-    });
-    const hasOverride = (hostEnvironment["OPENCODE_DB"]?.trim().length ?? 0) > 0;
+    const databasePaths = [...new Set(resolved.flatMap((entry) => entry.databasePaths))].sort(
+      (left, right) => left.localeCompare(right),
+    );
+    const sourcePaths = [...new Set(resolved.map((entry) => entry.sourcePath))].sort(
+      (left, right) => left.localeCompare(right),
+    );
     return {
       databasePaths,
-      // Buckets are provider-scoped rather than source-scoped. Treat all
-      // channel databases as one source so another environment cannot claim
-      // one database and accidentally merge duplicate buckets from another.
-      sourcePath:
-        hasOverride && databasePaths.length === 1
-          ? (databasePaths[0] ?? dataDirectory)
-          : dataDirectory,
+      // Usage buckets are provider-scoped, so all instance databases must be
+      // represented by one deterministic source fingerprint.
+      sourcePath: sourcePaths.join(", "),
     };
   });
 
@@ -378,8 +404,11 @@ export const make = Effect.gen(function* () {
     const hostId = NodeOS.hostname();
     // The home resolvers ask for `Path` themselves; satisfy them from the
     // instance we already hold so `readSummary` stays context-free.
-    const dirs = yield* resolveTranscriptDirs().pipe(Effect.provideService(Path.Path, path));
-    const openCode = yield* resolveOpenCodeDatabases();
+    const resolvedSources = yield* resolveTranscriptDirs().pipe(
+      Effect.provideService(Path.Path, path),
+    );
+    const dirs = resolvedSources.dirs;
+    const openCode = yield* resolveOpenCodeDatabases(resolvedSources.openCodeEnvironments);
     const windowStart = DateTime.make(`${input.sinceDay}T00:00:00Z`);
     if (Option.isNone(windowStart)) {
       return yield* new UsageReadError({
@@ -461,7 +490,12 @@ export const make = Effect.gen(function* () {
     }
 
     if (openCode.databasePaths.length > 0) {
-      const volumeId = yield* Effect.promise(() => readDirectoryVolumeId(openCode.sourcePath));
+      const volumeIds = yield* Effect.forEach(openCode.databasePaths, (databasePath) =>
+        Effect.promise(() => readDirectoryVolumeId(databasePath)),
+      );
+      const volumeId = [...new Set(volumeIds.filter((id) => id.length > 0))]
+        .sort((left, right) => left.localeCompare(right))
+        .join("|");
       const sessionIds = new Set<string>();
       let existingDatabases = 0;
       let scannedFiles = 0;

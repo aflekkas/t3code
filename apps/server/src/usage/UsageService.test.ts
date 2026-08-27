@@ -2,7 +2,12 @@
 import * as NodeSqlite from "node:sqlite";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { UsageDay } from "@t3tools/contracts";
+import {
+  ProviderDriverKind,
+  ProviderInstanceEnvironmentVariableName,
+  ProviderInstanceId,
+  UsageDay,
+} from "@t3tools/contracts";
 import { HostProcessEnvironment } from "@t3tools/shared/hostProcess";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -26,7 +31,7 @@ const EmptyRatesHttpClient = Layer.succeed(
   ),
 );
 
-it.effect("includes OpenCode SQLite usage and source health in the summary", () =>
+it.effect("includes an OpenCode instance database override in the summary", () =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -80,12 +85,24 @@ it.effect("includes OpenCode SQLite usage and source health in the summary", () 
               claudeAgent: { homePath: path.join(root, "claude") },
               codex: { homePath: path.join(root, "codex") },
             },
+            providerInstances: {
+              [ProviderInstanceId.make("opencode_custom")]: {
+                driver: ProviderDriverKind.make("opencode"),
+                environment: [
+                  {
+                    name: ProviderInstanceEnvironmentVariableName.make("OPENCODE_DB"),
+                    value: databasePath,
+                    sensitive: false,
+                  },
+                ],
+              },
+            },
           }),
           ServerConfig.layerTest(process.cwd(), path.join(root, "t3-home")),
           EmptyRatesHttpClient,
           Layer.succeed(HostProcessEnvironment, {
             GROK_HOME: path.join(root, "grok"),
-            OPENCODE_DB: databasePath,
+            OPENCODE_DB: path.join(root, "missing-global-opencode.db"),
           }),
         ),
       ),
