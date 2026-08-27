@@ -261,6 +261,36 @@ it.layer(testLayer)("checkOpenCodeProviderStatus", (it) => {
                   name: "Unpriced Model",
                   variants: {},
                 },
+                "partial-base-cost": {
+                  id: "partial-base-cost",
+                  name: "Partial Base Cost",
+                  variants: {},
+                  cost: { input: 0, output: 0 },
+                },
+                "partial-tier-cost": {
+                  id: "partial-tier-cost",
+                  name: "Partial Tier Cost",
+                  variants: {},
+                  cost: {
+                    ...zeroCost,
+                    tiers: [
+                      {
+                        input: 0,
+                        output: 0,
+                        tier: { type: "context", size: 200_000 },
+                      },
+                    ],
+                  },
+                },
+                "partial-over-200k-cost": {
+                  id: "partial-over-200k-cost",
+                  name: "Partial Over 200K Cost",
+                  variants: {},
+                  cost: {
+                    ...zeroCost,
+                    experimentalOver200K: { input: 0, output: 0 },
+                  },
+                },
               },
             },
           ],
@@ -285,6 +315,18 @@ it.layer(testLayer)("checkOpenCodeProviderStatus", (it) => {
       );
       NodeAssert.equal(
         snapshot.models.find((model) => model.slug === "opencode/unpriced-model")?.isFree,
+        undefined,
+      );
+      NodeAssert.equal(
+        snapshot.models.find((model) => model.slug === "opencode/partial-base-cost")?.isFree,
+        undefined,
+      );
+      NodeAssert.equal(
+        snapshot.models.find((model) => model.slug === "opencode/partial-tier-cost")?.isFree,
+        undefined,
+      );
+      NodeAssert.equal(
+        snapshot.models.find((model) => model.slug === "opencode/partial-over-200k-cost")?.isFree,
         undefined,
       );
     }),

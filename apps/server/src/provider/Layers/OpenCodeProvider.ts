@@ -174,16 +174,16 @@ function isOpenCodeModelFree(cost: Model["cost"] | undefined): boolean {
     return false;
   }
 
-  const rates = [cost.input, cost.output, cost.cache.read, cost.cache.write];
+  const rates = [cost.input, cost.output, cost.cache?.read, cost.cache?.write];
   for (const tier of cost.tiers ?? []) {
-    rates.push(tier.input, tier.output, tier.cache.read, tier.cache.write);
+    rates.push(tier.input, tier.output, tier.cache?.read, tier.cache?.write);
   }
   if (cost.experimentalOver200K) {
     rates.push(
       cost.experimentalOver200K.input,
       cost.experimentalOver200K.output,
-      cost.experimentalOver200K.cache.read,
-      cost.experimentalOver200K.cache.write,
+      cost.experimentalOver200K.cache?.read,
+      cost.experimentalOver200K.cache?.write,
     );
   }
 
