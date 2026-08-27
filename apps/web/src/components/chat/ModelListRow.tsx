@@ -77,7 +77,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
           ) : null}
           {props.model.isFree ? (
             <span
-              className="shrink-0 rounded border border-success/30 bg-success/10 px-1 py-px text-[10px] font-bold uppercase leading-none tracking-wide text-success-foreground"
+              className="shrink-0 rounded border border-success/35 bg-success/10 px-0.5 py-px text-[10px] font-bold uppercase leading-none tracking-wide text-success-foreground dark:bg-success/16"
               aria-label="Free model"
             >
               Free
